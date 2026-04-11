@@ -75,35 +75,33 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
     );
   }
 
-  if (!resolvedDisplayName) {
-    return (
-      <div className="flex w-full flex-col gap-4 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-5 text-center">
-        <p className="text-sm text-muted-foreground">
-          We need your display name from the Join flow before you can sign in with your password — so we
-          don&apos;t ask for your name on this screen.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          Go to{" "}
-          <Link href="/join" className="font-semibold text-accent hover:underline">
-            Join a group
-          </Link>
-          , enter your invite and display name, then open Log in from that page.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Or use{" "}
-          <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">/login?displayName=YourName</code>
-        </p>
-      </div>
-    );
-  }
-
   return (
     <form action={formAction} className="flex w-full flex-col gap-4">
-      <input type="hidden" name="displayName" value={resolvedDisplayName} />
-      <div className="rounded-xl border border-border/80 bg-muted/30 px-4 py-3 text-center text-sm">
-        <span className="text-muted-foreground">Signing in as </span>
-        <span className="font-semibold text-foreground">{resolvedDisplayName}</span>
-      </div>
+      {resolvedDisplayName ? (
+        <>
+          {/* Why: URL or join flow already fixed the name — keep a single password field for a shorter path. */}
+          <input type="hidden" name="displayName" value={resolvedDisplayName} />
+          <div className="rounded-xl border border-border/80 bg-muted/30 px-4 py-3 text-center text-sm">
+            <span className="text-muted-foreground">Signing in as </span>
+            <span className="font-semibold text-foreground">{resolvedDisplayName}</span>
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {/* Why: direct visits to `/login` have no stored name — collect it here instead of blocking on join or query params. */}
+          <label htmlFor="login-display-name" className="text-sm font-medium text-foreground">
+            Display name
+          </label>
+          <input
+            id="login-display-name"
+            name="displayName"
+            type="text"
+            required
+            autoComplete="username"
+            className={inputClass}
+          />
+        </div>
+      )}
       <div className="flex flex-col gap-1.5">
         <label htmlFor="login-password" className="text-sm font-medium text-foreground">
           Password

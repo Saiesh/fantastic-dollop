@@ -5,7 +5,8 @@ import { LoginForm } from "@/app/login/login-form";
 
 export const metadata: Metadata = {
   title: "Sign in | IPL Fanbet",
-  description: "Sign in with the password you chose when you joined a group.",
+  description:
+    "Sign in with your display name and the password you chose when you joined a group.",
 };
 
 function parseDisplayNameFromSearch(
@@ -46,8 +47,8 @@ export default async function LoginPage({
             <p className="text-sm font-bold uppercase tracking-[0.2em] text-accent">IPL Fanbet</p>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">Sign in</h1>
             <p className="text-sm text-muted-foreground">
-              Enter the password you set when you joined. Your display name comes from Join or your
-              invite link — this screen only asks for your password.
+              Enter your display name and the password you set when you joined. If you came from
+              Join or an invite link, your name may already be filled in for you.
             </p>
           </div>
           <div className="rounded-2xl border border-border/80 bg-card/90 p-6 shadow-xl shadow-black/40 ring-1 ring-white/5 backdrop-blur-sm">
