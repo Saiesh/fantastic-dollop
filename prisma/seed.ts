@@ -1,5 +1,9 @@
-import "dotenv/config";
+import { config } from "dotenv";
 import { PrismaPg } from "@prisma/adapter-pg";
+
+// Why: match `prisma.config.ts` — CLI and Next use `.env.local`; default dotenv only reads `.env`.
+config({ path: ".env" });
+config({ path: ".env.local", override: true });
 import pg from "pg";
 // Relative path because seed.ts runs outside the Next.js build (no @/ alias)
 import { PrismaClient } from "../src/generated/prisma/client.js";
