@@ -71,3 +71,42 @@ export async function getBetsForMatch(
 
   return rows.map(toBetDTO);
 }
+
+/** Plain row for UI that lists each member’s pick with display name and team label (no raw Prisma types). */
+export interface GroupBetForMatchRow {
+  userId: string;
+  displayName: string;
+  selectedTeamId: string;
+  teamShortName: string;
+  betType: string;
+  hasPalated: boolean;
+  palatTeamId: string | null;
+}
+
+/**
+ * All bets for a match in a group, with user display name and selected team short name for the match page.
+ * Joins are done in one query so the UI does not need separate user/team lookups.
+ */
+export async function getGroupBetsForMatch(
+  matchId: string,
+  groupId: string,
+): Promise<GroupBetForMatchRow[]> {
+  const rows = await prisma.bet.findMany({
+    where: { matchId, groupId },
+    include: {
+      user: { select: { displayName: true } },
+      selectedTeam: { select: { shortName: true } },
+    },
+    orderBy: { user: { displayName: "asc" } },
+  });
+
+  return rows.map((row) => ({
+    userId: row.userId,
+    displayName: row.user.displayName,
+    selectedTeamId: row.selectedTeamId,
+    teamShortName: row.selectedTeam.shortName,
+    betType: row.betType,
+    hasPalated: row.hasPalated,
+    palatTeamId: row.palatTeamId,
+  }));
+}

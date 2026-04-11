@@ -1,11 +1,13 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { placeBet } from "@/lib/actions/place-bet";
 import { applyPalat } from "@/lib/actions/use-palat";
 import type { ActionResult, BetDTO, PalatUsageDTO } from "@/types/bets";
+import { Badge } from "@/components/ui/badge";
 
 interface Team {
   id: string;
@@ -27,9 +29,20 @@ interface BetFormProps {
   className?: string;
 }
 
+function teamTintStyle(
+  team: Team,
+  selected: boolean,
+): CSSProperties | undefined {
+  if (!selected || !team.primaryColor) return undefined;
+  // Why: subtle tint from franchise color without full opacity blocks.
+  return {
+    backgroundColor: `${team.primaryColor}26`,
+    borderColor: team.primaryColor,
+  };
+}
+
 /**
- * Interactive bet placement and Palat form. Handles the full lifecycle:
- * team selection, double-down toggle, bet submission, and mid-match Palat switch.
+ * Interactive bet placement and Palat form — team-colored tiles, 2x chip, ticket-style locked state.
  */
 export function BetForm({
   userId,
@@ -107,162 +120,122 @@ export function BetForm({
 
   return (
     <div className={cn("space-y-5", className)}>
-      {/* Team Selection */}
-      {isBettingOpen && !hasBet ? (
+      {isBettingOpen ? (
         <>
           <div className="grid grid-cols-2 gap-3">
-            {[team1, team2].map((team) => (
-              <button
-                key={team.id}
-                type="button"
-                onClick={() => setSelectedTeam(team.id)}
-                disabled={isPending}
-                className={cn(
-                  "rounded-xl border-2 px-4 py-6 text-center transition-all",
-                  selectedTeam === team.id
-                    ? "border-accent bg-accent/5 ring-1 ring-accent/20"
-                    : "border-border hover:border-accent/30 hover:bg-muted",
-                  "disabled:opacity-50",
-                )}
-              >
-                <p className="text-xl font-bold">{team.shortName}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{team.name}</p>
-              </button>
-            ))}
+            {[team1, team2].map((team) => {
+              const selected = selectedTeam === team.id;
+              return (
+                <button
+                  key={team.id}
+                  type="button"
+                  onClick={() => setSelectedTeam(team.id)}
+                  disabled={isPending}
+                  className={cn(
+                    "flex min-h-20 flex-col items-center justify-center rounded-2xl border-2 px-3 py-5 text-center transition-all",
+                    selected
+                      ? "ring-2 ring-accent/40"
+                      : "border-border hover:border-accent/30 hover:bg-muted/50",
+                    "disabled:opacity-50",
+                  )}
+                  style={teamTintStyle(team, selected)}
+                >
+                  {team.primaryColor ? (
+                    <span
+                      className="mb-2 h-10 w-10 rounded-full ring-2 ring-white/10"
+                      style={{ backgroundColor: team.primaryColor }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <p className="text-xl font-bold text-foreground">{team.shortName}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{team.name}</p>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Double Down Toggle */}
-          <label className="flex items-center gap-3 rounded-lg border border-border px-4 py-3 cursor-pointer hover:bg-muted transition-colors">
-            <input
-              type="checkbox"
-              checked={isDoubleDown}
-              onChange={(e) => setIsDoubleDown(e.target.checked)}
-              className="h-4 w-4 rounded accent-accent"
-            />
-            <div>
-              <p className="text-sm font-medium">Double Down</p>
-              <p className="text-xs text-muted-foreground">
-                +4 pts if correct (instead of +2). Palat disabled for this match.
-              </p>
-            </div>
-          </label>
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center">
+            <button
+              type="button"
+              onClick={() => setIsDoubleDown((v) => !v)}
+              className={cn(
+                "rounded-full border-2 px-5 py-2 text-sm font-bold transition",
+                isDoubleDown
+                  ? "border-accent bg-accent/20 text-accent"
+                  : "border-border bg-muted/30 text-muted-foreground hover:border-accent/40",
+              )}
+            >
+              2x Double Down
+            </button>
+            <p className="text-center text-xs text-muted-foreground sm:max-w-xs sm:text-left">
+              +4 pts if correct. Palat off for this match.
+            </p>
+          </div>
 
           <button
             type="button"
             onClick={handlePlaceBet}
             disabled={isPending || !selectedTeam}
             className={cn(
-              "w-full rounded-lg px-4 py-3 text-sm font-semibold transition-colors",
-              "bg-accent text-accent-foreground hover:bg-accent/90",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
+              "w-full rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-4 text-sm font-bold text-accent-foreground shadow-lg shadow-amber-900/20 transition hover:brightness-110",
+              "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            {isPending ? "Placing…" : isDoubleDown ? "Place Double Down Bet" : "Place Bet"}
-          </button>
-        </>
-      ) : isBettingOpen && hasBet ? (
-        <>
-          {/* Edit existing bet while still open */}
-          <div className="grid grid-cols-2 gap-3">
-            {[team1, team2].map((team) => (
-              <button
-                key={team.id}
-                type="button"
-                onClick={() => setSelectedTeam(team.id)}
-                disabled={isPending}
-                className={cn(
-                  "rounded-xl border-2 px-4 py-6 text-center transition-all",
-                  selectedTeam === team.id
-                    ? "border-accent bg-accent/5 ring-1 ring-accent/20"
-                    : "border-border hover:border-accent/30 hover:bg-muted",
-                  "disabled:opacity-50",
-                )}
-              >
-                <p className="text-xl font-bold">{team.shortName}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{team.name}</p>
-              </button>
-            ))}
-          </div>
-
-          <label className="flex items-center gap-3 rounded-lg border border-border px-4 py-3 cursor-pointer hover:bg-muted transition-colors">
-            <input
-              type="checkbox"
-              checked={isDoubleDown}
-              onChange={(e) => setIsDoubleDown(e.target.checked)}
-              className="h-4 w-4 rounded accent-accent"
-            />
-            <div>
-              <p className="text-sm font-medium">Double Down</p>
-              <p className="text-xs text-muted-foreground">
-                +4 pts if correct. Palat disabled.
-              </p>
-            </div>
-          </label>
-
-          <button
-            type="button"
-            onClick={handlePlaceBet}
-            disabled={isPending || !selectedTeam}
-            className={cn(
-              "w-full rounded-lg px-4 py-3 text-sm font-semibold transition-colors",
-              "bg-accent text-accent-foreground hover:bg-accent/90",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
-          >
-            {isPending ? "Updating…" : "Update Bet"}
+            {isPending ? "Placing…" : hasBet ? "Update Bet" : isDoubleDown ? "Place 2x bet" : "Place bet"}
           </button>
         </>
       ) : null}
 
-      {/* Locked Bet Display */}
       {!isBettingOpen && hasBet ? (
-        <div className="rounded-xl border border-border bg-muted/50 p-5 text-center">
-          <p className="text-xs text-muted-foreground mb-2">Your pick</p>
-          <p className="text-2xl font-bold">
+        <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-border bg-gradient-to-b from-muted/40 to-card/50 p-6 text-center shadow-inner ring-1 ring-white/5">
+          <div className="absolute left-0 top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background ring-2 ring-border" />
+          <div className="absolute right-0 top-1/2 flex h-6 w-6 translate-x-1/2 -translate-y-1/2 rounded-full bg-background ring-2 ring-border" />
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Betting slip
+          </p>
+          <p className="mt-3 text-3xl font-black tracking-tight text-foreground">
             {existingBet.selectedTeamId === team1.id ? team1.shortName : team2.shortName}
           </p>
-          <div className="mt-2 flex items-center justify-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
             {existingBet.betType === "double_down" ? (
-              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                Double Down
-              </span>
+              <Badge variant="warning">2x</Badge>
             ) : null}
-            {existingBet.hasPalated ? (
-              <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
-                Palated
-              </span>
-            ) : null}
+            {existingBet.hasPalated ? <Badge variant="accent">Palat</Badge> : null}
           </div>
         </div>
       ) : null}
 
-      {/* No bet placed and deadline passed */}
       {!isBettingOpen && !hasBet ? (
-        <div className="rounded-xl border border-dashed border-border p-5 text-center">
+        <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-6 text-center">
           <p className="text-sm text-muted-foreground">
             Betting deadline has passed. No bet placed.
           </p>
         </div>
       ) : null}
 
-      {/* Palat Button */}
       {canPalat ? (
         <button
           type="button"
           onClick={handlePalat}
           disabled={isPending}
           className={cn(
-            "w-full rounded-lg border-2 border-purple-300 px-4 py-3 text-sm font-semibold transition-all",
-            "bg-purple-50 text-purple-700 hover:bg-purple-100",
-            "dark:border-purple-700 dark:bg-purple-950/30 dark:text-purple-300 dark:hover:bg-purple-950/50",
-            "disabled:opacity-50 disabled:cursor-not-allowed",
+            "w-full rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-4 text-sm font-bold text-white shadow-lg shadow-purple-900/30 transition hover:brightness-110",
+            "disabled:cursor-not-allowed disabled:opacity-50",
           )}
         >
-          {isPending ? "Switching…" : `Palat! Switch team (${palatUsage!.maxAllowed - palatUsage!.usedCount} left)`}
+          {isPending ? (
+            "Switching…"
+          ) : (
+            <span className="flex items-center justify-center gap-2">
+              Palat — switch team
+              <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold">
+                {palatUsage!.maxAllowed - palatUsage!.usedCount} left
+              </span>
+            </span>
+          )}
         </button>
       ) : null}
 
-      {/* Palat unavailable reasons */}
       {isPalatWindowOpen && hasBet && !canPalat ? (
         <p className="text-center text-xs text-muted-foreground">
           {existingBet?.betType === "double_down"
@@ -275,15 +248,14 @@ export function BetForm({
         </p>
       ) : null}
 
-      {/* Feedback */}
       {message ? (
         <p
           role="alert"
           className={cn(
-            "rounded-lg px-4 py-3 text-sm font-medium",
+            "rounded-xl px-4 py-3 text-sm font-medium",
             message.type === "success"
-              ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"
-              : "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400",
+              ? "bg-success/15 text-success ring-1 ring-success/30"
+              : "bg-destructive/15 text-destructive ring-1 ring-destructive/30",
           )}
         >
           {message.text}

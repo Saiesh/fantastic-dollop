@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn, formatMatchDate, formatMatchTime } from "@/lib/utils";
 import type { MatchStage, MatchStatus, MatchResult } from "@/generated/prisma";
 
 interface MatchTeam {
@@ -55,13 +55,9 @@ const STAGE_LABELS: Record<MatchStage, string> = {
   final: "Final",
 };
 
+// Why: Delegates to shared IST helpers so the list matches fan-facing match times.
 function formatDate(date: Date): string {
-  return new Date(date).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return `${formatMatchDate(date, { day: "numeric", month: "short" })} ${formatMatchTime(date)}`;
 }
 
 export function MatchList({ matches, onSelectMatch, selectedMatchId, className }: MatchListProps) {

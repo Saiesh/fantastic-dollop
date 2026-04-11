@@ -58,7 +58,7 @@ export type JoinGroupResult =
 export type LeagueTeamsForInviteResult =
   | {
       ok: true;
-      teams: { id: string; name: string; shortName: string }[];
+      teams: { id: string; name: string; shortName: string; primaryColor: string | null }[];
     }
   | { ok: false; error: "INVALID_INVITE" };
 

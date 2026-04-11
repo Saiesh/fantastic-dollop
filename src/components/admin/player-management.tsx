@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { cn } from "@/lib/utils";
+import { cn, formatMatchDate } from "@/lib/utils";
 import {
   removePlayerFromLeague,
   banPlayerFromLeague,
@@ -254,7 +254,7 @@ function PlayerTableRow({ leagueId, player, onResult }: PlayerTableRowProps) {
           )}
         </td>
         <td className="px-5 py-3 text-xs text-muted-foreground">
-          {new Date(player.joinedAt).toLocaleDateString("en-IN", {
+          {formatMatchDate(player.joinedAt, {
             day: "numeric",
             month: "short",
             year: "numeric",
@@ -413,7 +413,7 @@ function BannedRow({ leagueId, ban, onResult }: BannedRowProps) {
         )}
         <p className="mt-0.5 text-[10px] text-muted-foreground/70">
           Banned{" "}
-          {new Date(ban.createdAt).toLocaleDateString("en-IN", {
+          {formatMatchDate(ban.createdAt, {
             day: "numeric",
             month: "short",
             year: "numeric",

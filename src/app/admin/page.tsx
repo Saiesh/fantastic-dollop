@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export const metadata: Metadata = {
-  title: "Admin Dashboard | IPL FanBet",
+  title: "Admin Dashboard | IPL Fanbet",
 };
 
 // Why: force-dynamic so admin always sees fresh league data without stale cache.

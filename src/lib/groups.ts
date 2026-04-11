@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { getGroupLeaderboard } from "@/lib/leaderboard";
-import type { MatchStage } from "@/generated/prisma";
+import type { MatchStage, MatchStatus } from "@/generated/prisma";
 
 // --------------------------------------------------------------------------
 // Home team eligibility for late joiners (PRD Section 13).
@@ -17,6 +17,7 @@ interface EligibleTeam {
   id: string;
   name: string;
   shortName: string;
+  primaryColor: string | null;
 }
 
 /**
@@ -32,7 +33,9 @@ export async function getEligibleHomeTeams(
   const [allTeams, completedCount, upcomingMatches] = await Promise.all([
     prisma.leagueTeam.findMany({
       where: { leagueId },
-      select: { team: { select: { id: true, name: true, shortName: true } } },
+      select: {
+        team: { select: { id: true, name: true, shortName: true, primaryColor: true } },
+      },
     }),
     prisma.match.count({
       where: { leagueId, status: { in: ["completed", "abandoned"] } },
@@ -163,6 +166,7 @@ export async function getUserGroups(userId: string) {
       id: true,
       role: true,
       hasPaid: true,
+      homeTeam: { select: { shortName: true, primaryColor: true } },
       group: {
         select: {
           id: true,
@@ -179,13 +183,45 @@ export async function getUserGroups(userId: string) {
   });
 }
 
+/**
+ * Landing-page aggregates — why: one cheap query for total points + group count
+ * without N+1 leaderboard calls per card.
+ */
+export async function getUserHomeSummary(userId: string): Promise<{
+  totalPoints: number;
+  groupCount: number;
+}> {
+  const [agg, groupCount] = await Promise.all([
+    prisma.pointsLedger.aggregate({
+      where: { userId },
+      _sum: { points: true },
+    }),
+    prisma.groupMembership.count({ where: { userId } }),
+  ]);
+  return {
+    totalPoints: agg._sum.points ?? 0,
+    groupCount,
+  };
+}
+
 interface UpcomingMatchWithBet {
   id: string;
   matchNumber: number;
   startTimeUtc: string;
   stage: MatchStage;
-  team1: { id: string; name: string; shortName: string };
-  team2: { id: string; name: string; shortName: string };
+  status: MatchStatus;
+  team1: {
+    id: string;
+    name: string;
+    shortName: string;
+    primaryColor: string | null;
+  };
+  team2: {
+    id: string;
+    name: string;
+    shortName: string;
+    primaryColor: string | null;
+  };
   existingBet: { teamShortName: string; isDoubleDown: boolean } | null;
 }
 
@@ -213,7 +249,9 @@ export async function getGroupDashboardData(groupId: string, userId: string) {
   const membership = await prisma.groupMembership.findFirst({
     where: { userId, groupId },
     select: {
-      homeTeam: { select: { id: true, name: true, shortName: true } },
+      homeTeam: {
+        select: { id: true, name: true, shortName: true, primaryColor: true },
+      },
     },
   });
 
@@ -230,8 +268,13 @@ export async function getGroupDashboardData(groupId: string, userId: string) {
         matchNumber: true,
         startTimeUtc: true,
         stage: true,
-        team1: { select: { id: true, name: true, shortName: true } },
-        team2: { select: { id: true, name: true, shortName: true } },
+        status: true,
+        team1: {
+          select: { id: true, name: true, shortName: true, primaryColor: true },
+        },
+        team2: {
+          select: { id: true, name: true, shortName: true, primaryColor: true },
+        },
       },
     }),
     getGroupLeaderboard(groupId),
@@ -256,6 +299,7 @@ export async function getGroupDashboardData(groupId: string, userId: string) {
       matchNumber: m.matchNumber,
       startTimeUtc: m.startTimeUtc.toISOString(),
       stage: m.stage,
+      status: m.status,
       team1: m.team1,
       team2: m.team2,
       existingBet: bet

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { cn } from "@/lib/utils";
+import { cn, formatMatchDateTime, formatMatchTime } from "@/lib/utils";
 import { submitMatchResult, markFirstInningsComplete, setMatchLive } from "@/lib/actions/admin";
 import type { MatchStatus, MatchResult } from "@/generated/prisma";
 
@@ -80,7 +80,7 @@ export function MatchActions({ match, className }: MatchActionsProps) {
             Match #{match.matchNumber}
           </h3>
           <span className="text-sm text-zinc-500">
-            {new Date(match.startTimeUtc).toLocaleString("en-IN", {
+            {formatMatchDateTime(match.startTimeUtc, {
               dateStyle: "medium",
               timeStyle: "short",
             })}
@@ -167,10 +167,7 @@ export function MatchActions({ match, className }: MatchActionsProps) {
           {match.firstInningsCompleteTimeUtc && !isFinished && (
             <div className="rounded-lg bg-green-50 px-4 py-2 text-xs text-green-700 dark:bg-green-950/20 dark:text-green-400">
               First innings completed at{" "}
-              {new Date(match.firstInningsCompleteTimeUtc).toLocaleTimeString("en-IN", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {formatMatchTime(match.firstInningsCompleteTimeUtc)}
             </div>
           )}
 

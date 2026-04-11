@@ -7,13 +7,13 @@ interface BackLinkProps {
   className?: string;
 }
 
-/** Consistent "← Back" navigation used at the top of detail pages. */
+/** Consistent back navigation — why: secondary link color matches accent-secondary usage. */
 export function BackLink({ href, label = "Back", className }: BackLinkProps) {
   return (
     <Link
       href={href}
       className={cn(
-        "inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors",
+        "inline-flex items-center gap-1.5 text-sm text-accent-secondary transition-colors hover:text-accent",
         className,
       )}
     >

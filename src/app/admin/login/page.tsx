@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { AdminLoginForm } from "@/app/admin/login/admin-login-form";
 
 export const metadata: Metadata = {
-  title: "Admin sign in | IPL FanBet",
+  title: "Admin sign in | IPL Fanbet",
 };
 
 /**

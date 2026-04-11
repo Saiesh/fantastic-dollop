@@ -8,12 +8,12 @@ interface PageHeaderProps {
   className?: string;
 }
 
-/** Reusable page header with title, optional subtitle, badge, and action slot. */
+/** Page header — why: consistent hierarchy under sticky group chrome. */
 export function PageHeader({ title, subtitle, badge, children, className }: PageHeaderProps) {
   return (
     <header
       className={cn(
-        "flex flex-col gap-1 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between",
+        "flex flex-col gap-1 border-b border-border/80 pb-6 sm:flex-row sm:items-end sm:justify-between",
         className,
       )}
     >
@@ -21,10 +21,10 @@ export function PageHeader({ title, subtitle, badge, children, className }: Page
         {subtitle ? (
           <p className="text-sm font-medium text-muted-foreground">{subtitle}</p>
         ) : null}
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
           {badge ? (
-            <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+            <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground ring-1 ring-border/60">
               {badge}
             </span>
           ) : null}

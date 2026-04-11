@@ -20,13 +20,16 @@ async function submitLogin(
 }
 
 interface LoginFormProps {
-  /** Why: `?displayName=` from shareable links or redirects encodes who is signing in without a second name field. */
+  /** Why: `?displayName=` from shareable links encodes who is signing in without a second name field. */
   displayNameFromUrl: string | null;
 }
 
+const inputClass =
+  "w-full rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-accent focus:ring-2 focus:ring-accent/25";
+
 /**
- * Player sign-in: posts password (and hidden display name from join/URL) to the server action.
- * Why client: needs pending state, error display, sessionStorage hydration, and client navigation after the cookie is set.
+ * Player sign-in: posts password to the server action.
+ * Why client: pending state, error display, sessionStorage hydration, and navigation after cookie is set.
  */
 export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
   const router = useRouter();
@@ -36,7 +39,6 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
   const [resolvedDisplayName, setResolvedDisplayName] = useState<string | null>(
     () => displayNameFromUrl?.trim() || null,
   );
-  // Why: avoid flashing the “no account” message before we read sessionStorage (when there is no URL param).
   const [storageChecked, setStorageChecked] = useState(
     () => Boolean(displayNameFromUrl?.trim()),
   );
@@ -47,13 +49,12 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
       const stored = sessionStorage.getItem(PENDING_DISPLAY_NAME_KEY)?.trim();
       if (stored) setResolvedDisplayName(stored);
     } catch {
-      // Why: storage may be unavailable in private mode; login still works if `?displayName=` is used.
+      /* storage may be unavailable in private mode */
     } finally {
       setStorageChecked(true);
     }
   }, [displayNameFromUrl]);
 
-  // Why: after a successful login the dashboard lives at `/` — mirror join flow navigation.
   useEffect(() => {
     if (state?.ok && !redirected.current) {
       redirected.current = true;
@@ -76,27 +77,21 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
 
   if (!resolvedDisplayName) {
     return (
-      <div className="flex w-full flex-col gap-4 rounded-lg border border-border bg-card/50 px-4 py-5 text-center">
+      <div className="flex w-full flex-col gap-4 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-5 text-center">
         <p className="text-sm text-muted-foreground">
-          We need your display name from the Join flow before you can enter a
-          password here — so we don&apos;t ask for your name twice.
+          We need your display name from the Join flow before you can sign in with your password — so we
+          don&apos;t ask for your name on this screen.
         </p>
         <p className="text-sm text-muted-foreground">
           Go to{" "}
-          <Link
-            href="/join"
-            className="font-medium text-foreground underline underline-offset-4"
-          >
+          <Link href="/join" className="font-semibold text-accent hover:underline">
             Join a group
           </Link>
           , enter your invite and display name, then open Log in from that page.
         </p>
         <p className="text-xs text-muted-foreground">
-          Or use a link that includes your name, for example{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.7rem]">
-            /login?displayName=YourName
-          </code>
-          .
+          Or use{" "}
+          <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">/login?displayName=YourName</code>
         </p>
       </div>
     );
@@ -105,12 +100,12 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
   return (
     <form action={formAction} className="flex w-full flex-col gap-4">
       <input type="hidden" name="displayName" value={resolvedDisplayName} />
-      <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-center text-sm">
+      <div className="rounded-xl border border-border/80 bg-muted/30 px-4 py-3 text-center text-sm">
         <span className="text-muted-foreground">Signing in as </span>
-        <span className="font-medium text-foreground">{resolvedDisplayName}</span>
+        <span className="font-semibold text-foreground">{resolvedDisplayName}</span>
       </div>
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="login-password" className="text-sm font-medium">
+        <label htmlFor="login-password" className="text-sm font-medium text-foreground">
           Password
         </label>
         <input
@@ -119,7 +114,7 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
           type="password"
           required
           autoComplete="current-password"
-          className="rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground"
+          className={inputClass}
         />
       </div>
       {state != null && !state.ok ? (
@@ -131,19 +126,15 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
         type="submit"
         disabled={isPending}
         className={cn(
-          "rounded-lg px-4 py-3 text-sm font-semibold transition-colors",
-          "bg-accent text-accent-foreground hover:bg-accent/90",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
+          "rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-3 text-sm font-bold text-accent-foreground shadow-md shadow-amber-900/25 transition hover:brightness-110",
+          "disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >
         {isPending ? "Signing in…" : "Sign in"}
       </button>
       <p className="text-center text-sm text-muted-foreground">
         New here?{" "}
-        <Link
-          href="/join"
-          className="font-medium text-foreground underline underline-offset-4"
-        >
+        <Link href="/join" className="font-semibold text-accent hover:underline">
           Join a group
         </Link>
       </p>

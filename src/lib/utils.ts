@@ -16,3 +16,40 @@ export function formatINR(amount: number): string {
     maximumFractionDigits: 0,
   }).format(amount);
 }
+
+// Why: Match and ledger timestamps are stored in UTC but must display as IST for IPL,
+// independent of server region or the viewer's browser timezone.
+export function formatMatchDate(
+  date: Date | string,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  return new Date(date).toLocaleDateString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    ...options,
+  });
+}
+
+// Why: Same fixed Asia/Kolkata interpretation for time-only labels (kickoff, deadlines).
+export function formatMatchTime(
+  date: Date | string,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  return new Date(date).toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...options,
+  });
+}
+
+// Why: Some UI needs a single combined string (dateStyle/timeStyle or default locale
+// datetime); wrapping toLocaleString keeps IST consistent with the helpers above.
+export function formatMatchDateTime(
+  date: Date | string,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  return new Date(date).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    ...options,
+  });
+}

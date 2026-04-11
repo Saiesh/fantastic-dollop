@@ -3,6 +3,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 // Relative path because seed.ts runs outside the Next.js build (no @/ alias)
 import { PrismaClient } from "../src/generated/prisma/client.js";
+// Why: import `password-hash` directly — `password.ts` uses `server-only`, which breaks `tsx prisma/seed.ts`.
+import { hashPassword } from "../src/lib/auth/password-hash";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
@@ -74,8 +76,8 @@ interface FixtureDef {
 }
 
 /**
- * Evening single-header default: 7:30 PM IST ≈ 14:00 UTC.
- * Double-header first: ~3:30 PM IST ≈ 10:00 UTC; morning slot ~10:30 AM IST ≈ 05:00 UTC.
+ * Double-header first: ~3:30 PM IST ≈ 10:00 UTC.
+ * Evening single-header / double-header second: 7:30 PM IST ≈ 14:00 UTC.
  * Why: keeps `startTimeUtc` aligned with real broadcast windows without inventing arbitrary values.
  */
 function buildIpl2026Fixtures(): FixtureDef[] {
@@ -99,9 +101,9 @@ function buildIpl2026Fixtures(): FixtureDef[] {
     { matchNumber: 15, team1: "KKR", team2: "LSG", startTimeUtc: d(4, 9, 14), outcome: "team2_win" },
     { matchNumber: 16, team1: "RCB", team2: "RR", startTimeUtc: d(4, 10, 14), outcome: "team2_win" },
     // 2026-04-11: double-header — first fixture “live” for demo; second still upcoming
-    { matchNumber: 17, team1: "PBKS", team2: "SRH", startTimeUtc: d(4, 11, 5), outcome: "live_first_innings" },
+    { matchNumber: 17, team1: "PBKS", team2: "SRH", startTimeUtc: d(4, 11, 10), outcome: "live_first_innings" },
     { matchNumber: 18, team1: "CSK", team2: "DC", startTimeUtc: d(4, 11, 14), outcome: "upcoming" },
-    { matchNumber: 19, team1: "GT", team2: "LSG", startTimeUtc: d(4, 12, 5), outcome: "upcoming" },
+    { matchNumber: 19, team1: "GT", team2: "LSG", startTimeUtc: d(4, 12, 10), outcome: "upcoming" },
     { matchNumber: 20, team1: "MI", team2: "RCB", startTimeUtc: d(4, 12, 14), outcome: "upcoming" },
     { matchNumber: 21, team1: "RR", team2: "SRH", startTimeUtc: d(4, 13, 14), outcome: "upcoming" },
     { matchNumber: 22, team1: "CSK", team2: "KKR", startTimeUtc: d(4, 14, 14), outcome: "upcoming" },
@@ -240,12 +242,18 @@ const users = [
   { id: USER_IDS.vikram, displayName: "Vikram Singh" },
 ];
 
+/** Why: shared demo password for every seeded user; same scrypt digest works for login for all. */
+const SHARED_LOGIN_PASSWORD = "Puggy";
+
 // ---------------------------------------------------------------------------
 // Main seed function
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
   console.log("🌱 Seeding database…");
+
+  // Why: reuse app hashing so `/login` accepts `SHARED_LOGIN_PASSWORD` for every user row.
+  const sharedPasswordHash = await hashPassword(SHARED_LOGIN_PASSWORD);
 
   const fixtureDefs = buildIpl2026Fixtures();
   const matches = fixtureDefs.map(fixtureToMatchRow);
@@ -256,8 +264,8 @@ async function main(): Promise<void> {
     for (const u of users) {
       await tx.user.upsert({
         where: { id: u.id },
-        update: { displayName: u.displayName },
-        create: u,
+        update: { displayName: u.displayName, passwordHash: sharedPasswordHash },
+        create: { ...u, passwordHash: sharedPasswordHash },
       });
     }
     console.log(`  ✔ ${users.length} users`);
@@ -315,15 +323,29 @@ async function main(): Promise<void> {
 
     // ------ Group memberships ------
     // Rahul is the organiser; the rest are players.
-    const members = [
-      { userId: USER_IDS.rahul, role: "organiser" as const, homeTeamId: TEAM.CSK, hasPaid: true },
-      { userId: USER_IDS.priya, role: "player" as const, homeTeamId: TEAM.MI, hasPaid: true },
-      { userId: USER_IDS.arjun, role: "player" as const, homeTeamId: TEAM.RCB, hasPaid: true },
-      { userId: USER_IDS.sneha, role: "player" as const, homeTeamId: TEAM.KKR, hasPaid: false },
-      { userId: USER_IDS.vikram, role: "player" as const, homeTeamId: TEAM.DC, hasPaid: true },
+    // Why: `homeTeamId` is optional here so any member without one gets a random IPL franchise for the league.
+    const members: Array<{
+      userId: string;
+      role: "organiser" | "player";
+      homeTeamId?: string;
+      hasPaid: boolean;
+    }> = [
+      { userId: USER_IDS.rahul, role: "organiser", homeTeamId: TEAM.CSK, hasPaid: true },
+      { userId: USER_IDS.priya, role: "player", homeTeamId: TEAM.MI, hasPaid: true },
+      { userId: USER_IDS.arjun, role: "player", homeTeamId: TEAM.RCB, hasPaid: true },
+      { userId: USER_IDS.sneha, role: "player", hasPaid: true },
+      { userId: USER_IDS.vikram, role: "player", homeTeamId: TEAM.DC, hasPaid: true },
     ];
 
-    for (const m of members) {
+    const leagueTeamIds = Object.values(TEAM) as string[];
+    const resolvedMembers = members.map((m) => ({
+      ...m,
+      homeTeamId:
+        m.homeTeamId ??
+        leagueTeamIds[Math.floor(Math.random() * leagueTeamIds.length)]!,
+    }));
+
+    for (const m of resolvedMembers) {
       await tx.groupMembership.upsert({
         where: { userId_leagueId: { userId: m.userId, leagueId: LEAGUE_ID } },
         update: { homeTeamId: m.homeTeamId, role: m.role, hasPaid: m.hasPaid },
@@ -442,13 +464,10 @@ async function main(): Promise<void> {
 
     // Home-team-win bonus: +5 whenever your home team wins a completed match in the sample
     const HOME_TEAM_BONUS = 5;
-    const homeTeams: Record<string, string> = {
-      [USER_IDS.rahul]: TEAM.CSK,
-      [USER_IDS.priya]: TEAM.MI,
-      [USER_IDS.arjun]: TEAM.RCB,
-      [USER_IDS.sneha]: TEAM.KKR,
-      [USER_IDS.vikram]: TEAM.DC,
-    };
+    // Why: must match resolved membership home teams (including random assignment for Sneha).
+    const homeTeams: Record<string, string> = Object.fromEntries(
+      resolvedMembers.map((m) => [m.userId, m.homeTeamId]),
+    );
 
     for (const playerId of playerIds) {
       for (const m of betSample) {
@@ -558,6 +577,36 @@ async function main(): Promise<void> {
     // 60s timeout — each upsert is a network roundtrip to Supabase
     timeout: 120_000,
   });
+
+  // Why: any non-seed users (or restored DBs) still get the shared password and paid status.
+  await prisma.user.updateMany({ data: { passwordHash: sharedPasswordHash } });
+  await prisma.groupMembership.updateMany({ data: { hasPaid: true } });
+
+  // Why: if a row points at a team not in its league (or legacy bad data), pick a random valid league team.
+  const memberships = await prisma.groupMembership.findMany({
+    select: { id: true, leagueId: true, homeTeamId: true },
+  });
+  const leagueTeamsCache = new Map<string, string[]>();
+  for (const row of memberships) {
+    let teamIds = leagueTeamsCache.get(row.leagueId);
+    if (!teamIds) {
+      const rows = await prisma.leagueTeam.findMany({
+        where: { leagueId: row.leagueId },
+        select: { teamId: true },
+      });
+      teamIds = rows.map((r) => r.teamId);
+      leagueTeamsCache.set(row.leagueId, teamIds);
+    }
+    if (teamIds.length === 0) continue;
+    const valid = teamIds.includes(row.homeTeamId);
+    if (!valid) {
+      const homeTeamId = teamIds[Math.floor(Math.random() * teamIds.length)]!;
+      await prisma.groupMembership.update({
+        where: { id: row.id },
+        data: { homeTeamId },
+      });
+    }
+  }
 
   console.log("\n✅ Seed complete!");
 }

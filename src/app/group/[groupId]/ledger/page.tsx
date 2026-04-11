@@ -6,11 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { PointSource } from "@/generated/prisma";
 import type { Metadata } from "next";
+import { cn, formatMatchDate, formatMatchTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Points Ledger | IPL FanBet",
+  title: "Points Ledger | IPL Fanbet",
 };
 
 interface PageProps {
@@ -39,6 +40,18 @@ const SOURCE_VARIANTS: Record<PointSource, "success" | "accent" | "warning" | "d
   streak_albatross: "accent",
 };
 
+/** Why: quick visual scan in a vertical timeline without relying on a wide table on mobile. */
+const SOURCE_MARK: Record<PointSource, string> = {
+  bet: "◎",
+  palat_bet: "↻",
+  double_down_bet: "✦",
+  draw: "═",
+  home_team_win: "♥",
+  streak_birdie: "◇",
+  streak_eagle: "◆",
+  streak_albatross: "★",
+};
+
 export default async function PointsLedgerPage({ params }: PageProps) {
   const { groupId } = await params;
   const user = await getSessionUser();
@@ -50,7 +63,6 @@ export default async function PointsLedgerPage({ params }: PageProps) {
   });
   if (!group) notFound();
 
-  // Why: full audit trail — fetch all ledger entries for the group with player + match context.
   const entries = await prisma.pointsLedger.findMany({
     where: { groupId },
     orderBy: { createdAt: "desc" },
@@ -74,13 +86,8 @@ export default async function PointsLedgerPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Points Ledger"
-        subtitle="Full audit trail of all point awards"
-      >
-        <span className="text-xs text-muted-foreground">
-          {entries.length} entries
-        </span>
+      <PageHeader title="Points ledger" subtitle="Full audit trail of point awards">
+        <span className="text-xs text-muted-foreground">{entries.length} entries</span>
       </PageHeader>
 
       {entries.length === 0 ? (
@@ -89,73 +96,59 @@ export default async function PointsLedgerPage({ params }: PageProps) {
           description="The ledger populates after the first match result is entered."
         />
       ) : (
-        <div className="rounded-xl border border-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-max text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-3 text-left">Time</th>
-                  <th className="px-4 py-3 text-left">Player</th>
-                  <th className="px-4 py-3 text-left">Match</th>
-                  <th className="px-4 py-3 text-left">Source</th>
-                  <th className="px-4 py-3 text-right">Points</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors"
-                  >
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                      {entry.createdAt.toLocaleDateString("en-IN", {
+        <ol className="relative space-y-0 border-l border-border/80 pl-6">
+          {entries.map((entry) => (
+            <li key={entry.id} className="relative pb-8 last:pb-0">
+              <span
+                className="absolute -left-1.5 top-1 flex h-3 w-3 -translate-x-1/2 rounded-full border-2 border-background bg-accent ring-2 ring-accent/40"
+                aria-hidden
+              />
+              <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card/80 p-4 ring-1 ring-white/5 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-lg" aria-hidden>
+                      {SOURCE_MARK[entry.source]}
+                    </span>
+                    <Badge variant={SOURCE_VARIANTS[entry.source]}>{SOURCE_LABELS[entry.source]}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {formatMatchDate(entry.createdAt, {
                         day: "numeric",
                         month: "short",
                       })}{" "}
-                      {entry.createdAt.toLocaleTimeString("en-IN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-4 py-2.5 font-medium">
-                      {entry.user.displayName}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                      {entry.match ? (
-                        <span>
-                          #{entry.match.matchNumber}{" "}
-                          <span className="text-foreground">
-                            {entry.match.team1.shortName} vs {entry.match.team2.shortName}
-                          </span>
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant={SOURCE_VARIANTS[entry.source]}>
-                        {SOURCE_LABELS[entry.source]}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-semibold tabular-nums">
-                      <span
-                        className={
-                          entry.points > 0
-                            ? "text-success"
-                            : entry.points < 0
-                              ? "text-destructive"
-                              : "text-muted-foreground"
-                        }
-                      >
-                        {entry.points > 0 ? `+${entry.points}` : entry.points}
+                      {formatMatchTime(entry.createdAt)}
+                    </span>
+                  </div>
+                  <p className="font-semibold text-foreground">{entry.user.displayName}</p>
+                  {entry.match ? (
+                    <p className="text-xs text-muted-foreground">
+                      Match #{entry.match.matchNumber}{" "}
+                      <span className="text-foreground">
+                        {entry.match.team1.shortName} vs {entry.match.team2.shortName}
                       </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">League / streak award</p>
+                  )}
+                </div>
+                <div className="shrink-0 text-right sm:pt-1">
+                  <p
+                    className={cn(
+                      "text-2xl font-black tabular-nums",
+                      entry.points > 0
+                        ? "text-success"
+                        : entry.points < 0
+                          ? "text-destructive"
+                          : "text-muted-foreground",
+                    )}
+                  >
+                    {entry.points > 0 ? `+${entry.points}` : entry.points}
+                  </p>
+                  <p className="text-xs font-medium text-muted-foreground">points</p>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
       )}
     </div>
   );

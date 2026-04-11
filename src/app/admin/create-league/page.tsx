@@ -2,7 +2,7 @@ import { CreateLeagueForm } from "@/components/admin/create-league-form";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Create League | IPL FanBet Admin",
+  title: "Create League | IPL Fanbet Admin",
 };
 
 export default function CreateLeaguePage() {

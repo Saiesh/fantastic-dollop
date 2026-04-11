@@ -1,22 +1,27 @@
 @import "tailwindcss";
 
+/* Cricket Night: dark-first tokens — saffron accent, navy surfaces (plan: IPL FanBet UX revamp). */
 :root {
-  --background: #fafafa;
-  --foreground: #171717;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --border: #e4e4e7;
-  --card: #ffffff;
-  --card-foreground: #171717;
-  --accent: #4f46e5;
-  --accent-foreground: #ffffff;
-  --destructive: #dc2626;
-  --success: #16a34a;
-  --warning: #d97706;
+  --background: #060912;
+  --background-elevated: #0a0e1a;
+  --foreground: #f1f5f9;
+  --muted: #111827;
+  --muted-foreground: #64748b;
+  --border: #1e293b;
+  --card: #0f1629;
+  --card-foreground: #f1f5f9;
+  --accent: #f59e0b;
+  --accent-foreground: #0f172a;
+  --accent-secondary: #3b82f6;
+  --destructive: #f43f5e;
+  --success: #10b981;
+  --warning: #fbbf24;
+  --live: #ef4444;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-background-elevated: var(--background-elevated);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
@@ -25,31 +30,88 @@
   --color-card-foreground: var(--card-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-secondary: var(--accent-secondary);
   --color-destructive: var(--destructive);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-live: var(--live);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --animate-shimmer: shimmer 1.5s ease-in-out infinite;
+  --animate-pulse-live: pulse-live 2s ease-in-out infinite;
 }
 
-@media (prefers-color-scheme: dark) {
+/* Light mode: clean surfaces with same accent palette (prefers-color-scheme). */
+@media (prefers-color-scheme: light) {
   :root {
-    --background: #09090b;
-    --foreground: #fafafa;
-    --muted: #18181b;
-    --muted-foreground: #a1a1aa;
-    --border: #27272a;
-    --card: #111113;
-    --card-foreground: #fafafa;
-    --accent: #6366f1;
+    --background: #f8fafc;
+    --background-elevated: #ffffff;
+    --foreground: #0f172a;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --border: #e2e8f0;
+    --card: #ffffff;
+    --card-foreground: #0f172a;
+    --accent: #d97706;
     --accent-foreground: #ffffff;
-    --destructive: #ef4444;
-    --success: #22c55e;
-    --warning: #f59e0b;
+    --accent-secondary: #2563eb;
+    --destructive: #e11d48;
+    --success: #059669;
+    --warning: #d97706;
+    --live: #dc2626;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+/* Subtle pitch-style grid for marketing shells — low contrast so text stays readable. */
+.bg-cricket-grid {
+  background-image:
+    linear-gradient(to right, rgb(148 163 184 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(148 163 184 / 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@media (prefers-color-scheme: light) {
+  .bg-cricket-grid {
+    background-image:
+      linear-gradient(to right, rgb(15 23 42 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(15 23 42 / 0.04) 1px, transparent 1px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pulse-live {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgb(239 68 68 / 0.45);
+  }
+  50% {
+    opacity: 0.95;
+    box-shadow: 0 0 0 8px rgb(239 68 68 / 0);
+  }
+}
+
+/* Skeleton rows/cards — why: shared loading UI without inline arbitrary animation values in every file. */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    var(--border) 50%,
+    var(--muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
 }

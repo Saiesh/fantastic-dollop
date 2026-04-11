@@ -52,7 +52,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
             href="/"
             className="shrink-0 text-xs font-semibold uppercase tracking-widest text-accent transition-colors hover:text-accent/90"
           >
-            IPL FanBet
+            IPL Fanbet
           </Link>
           <span className="text-sm font-medium text-muted-foreground">Admin</span>
           <div className="ml-auto flex items-center gap-3">
