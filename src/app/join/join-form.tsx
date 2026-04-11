@@ -6,10 +6,19 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 import {
-  getLeagueTeamsForInvite,
   joinGroupWithInvite,
   type JoinGroupResult,
 } from "@/lib/actions/auth";
+
+type LeagueTeamsResponse =
+  | { ok: true; teams: TeamRow[] }
+  | { ok: false; error: string };
+
+async function fetchLeagueTeams(code: string): Promise<LeagueTeamsResponse> {
+  const res = await fetch(`/api/league-teams?code=${encodeURIComponent(code)}`);
+  if (!res.ok) throw new Error("network");
+  return res.json() as Promise<LeagueTeamsResponse>;
+}
 
 async function submitJoin(
   _prev: JoinGroupResult | null,
@@ -57,7 +66,6 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
   /** Why: bumping this re-runs the invite effect so "Try again" retries without changing the code. */
   const [teamsLoadRetry, setTeamsLoadRetry] = useState(0);
   const [homeTeamId, setHomeTeamId] = useState("");
-  const [password, setPassword] = useState("");
 
   const handleInviteChange = (value: string) => {
     setInviteCode(value);
@@ -79,7 +87,14 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
       if (cancelled) return;
       setTeamsLoading(true);
       setTeamsError(null);
-      void getLeagueTeamsForInvite(code)
+      // Why: fetchLeagueTeams uses a plain JSON API route instead of a server action.
+      // Server action calls use the Next.js RSC wire-format streaming protocol, which
+      // iOS WebKit stalls on indefinitely. A standard fetch/JSON request is reliable
+      // across all browsers. The timeout is a safety net for genuinely slow connections.
+      const fetchTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 10_000),
+      );
+      void Promise.race([fetchLeagueTeams(code), fetchTimeout])
         .then((res) => {
           if (cancelled) return;
           if (res.ok) {
@@ -123,7 +138,6 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
   /** Why: after a failed team load we must not allow submit until a retry succeeds (otherwise the server rejects with a confusing team message). */
   const teamsLoadBlockedSubmit =
     teamsError != null && inviteCode.trim().length >= 3;
-  const passwordReady = isSignedIn || password.trim().length >= 4;
 
   return (
     <form action={formAction} className="flex w-full flex-col gap-4">
@@ -242,6 +256,9 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
           <label htmlFor="join-password" className="text-sm font-medium text-foreground">
             Password
           </label>
+          {/* Why: uncontrolled so iOS password manager / keyboard autofill always registers — a
+              controlled input can leave React state empty if the browser fills without firing
+              a synthetic onChange, which would keep passwordReady false and block submit. */}
           <input
             id="join-password"
             name="password"
@@ -249,8 +266,6 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
             required
             minLength={4}
             autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
             className={inputClass}
             placeholder="At least 4 characters — use this to log in later"
           />
@@ -272,8 +287,7 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
           isPending ||
           teamsLoading ||
           teamsLoadBlockedSubmit ||
-          !homePickReady ||
-          !passwordReady
+          !homePickReady
         }
         className={cn(
           "rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-3 text-sm font-bold text-accent-foreground shadow-md shadow-amber-900/25 transition hover:brightness-110",
