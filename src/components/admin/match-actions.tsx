@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { cn, formatMatchDateTime, formatMatchTime } from "@/lib/utils";
-import { submitMatchResult, markFirstInningsComplete, setMatchLive } from "@/lib/actions/admin";
+import {
+  submitMatchResult,
+  markFirstInningsComplete,
+  setMatchLive,
+  setMatchCricinfoUrl,
+} from "@/lib/actions/admin";
 import type { MatchStatus, MatchResult } from "@/generated/prisma";
 
 interface MatchTeam {
@@ -14,6 +19,7 @@ interface MatchTeam {
 interface SelectedMatch {
   id: string;
   matchNumber: number;
+  espncricinfoUrl: string | null;
   startTimeUtc: Date;
   status: MatchStatus;
   result: MatchResult;
@@ -33,6 +39,8 @@ interface MatchActionsProps {
 export function MatchActions({ match, className }: MatchActionsProps) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  // Why: parent passes `key={selectedMatch.id}`, so this state resets per match.
+  const [urlInput, setUrlInput] = useState(match.espncricinfoUrl ?? "");
 
   const isFinished = match.status === "completed" || match.status === "abandoned";
   const canSetLive = match.status === "upcoming";
@@ -71,6 +79,20 @@ export function MatchActions({ match, className }: MatchActionsProps) {
     });
   }
 
+  function handleSaveCricinfoUrl() {
+    startTransition(async () => {
+      setMessage(null);
+      const trimmedUrl = urlInput.trim();
+      // Why: empty string means "clear URL" so cron can rediscover it later.
+      const res = await setMatchCricinfoUrl({
+        matchId: match.id,
+        espncricinfoUrl: trimmedUrl.length > 0 ? trimmedUrl : null,
+      });
+      if (res.error) setMessage({ type: "error", text: res.error });
+      else setMessage({ type: "success", text: "Cricinfo URL saved." });
+    });
+  }
+
   return (
     <div className={cn("space-y-6", className)}>
       {/* Match Header */}
@@ -96,6 +118,37 @@ export function MatchActions({ match, className }: MatchActionsProps) {
           <div className="text-center">
             <p className="text-xl font-bold">{match.team2.shortName}</p>
             <p className="text-xs text-zinc-500">{match.team2.name}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-700">
+          <h4 className="text-sm font-semibold mb-2">Cricinfo Source URL</h4>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+            Save the match URL to skip Gemini discovery during cron polls.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={urlInput}
+              onChange={(event) => setUrlInput(event.target.value)}
+              placeholder="https://www.espncricinfo.com/..."
+              className={cn(
+                "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm",
+                "text-zinc-900 outline-none ring-0 transition",
+                "focus:border-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100",
+              )}
+            />
+            <button
+              type="button"
+              onClick={handleSaveCricinfoUrl}
+              disabled={isPending}
+              className={cn(
+                "rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors",
+                "hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+            >
+              {isPending ? "Saving…" : "Save URL"}
+            </button>
           </div>
         </div>
 

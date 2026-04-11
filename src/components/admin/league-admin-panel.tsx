@@ -17,6 +17,7 @@ interface MatchTeam {
 interface MatchData {
   id: string;
   matchNumber: number;
+  espncricinfoUrl: string | null;
   startTimeUtc: Date;
   stage: MatchStage;
   status: MatchStatus;

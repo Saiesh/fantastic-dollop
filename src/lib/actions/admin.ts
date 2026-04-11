@@ -127,6 +127,8 @@ const SetMatchLiveSchema = z.object({
   matchId: z.string().min(1),
 });
 
+const CricinfoUrlPattern = /^https?:\/\/(?:www\.)?espncricinfo\.com\/.+/i;
+
 export async function setMatchLive(
   input: unknown
 ): Promise<{ data?: { matchId: string }; error?: string }> {
@@ -153,6 +155,45 @@ export async function setMatchLive(
 
   revalidatePath(`/admin/league/${match.leagueId}`);
   return { data: { matchId } };
+}
+
+const SetMatchCricinfoUrlSchema = z.object({
+  matchId: z.string().min(1),
+  espncricinfoUrl: z.string().trim().nullable(),
+});
+
+export async function setMatchCricinfoUrl(
+  input: unknown,
+): Promise<{ data?: { matchId: string; espncricinfoUrl: string | null }; error?: string }> {
+  const parsed = SetMatchCricinfoUrlSchema.safeParse(input);
+  if (!parsed.success) return { error: "Invalid input." };
+
+  const { matchId, espncricinfoUrl } = parsed.data;
+
+  if (espncricinfoUrl && !CricinfoUrlPattern.test(espncricinfoUrl)) {
+    return { error: "URL must be a valid espncricinfo.com link." };
+  }
+
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    select: { id: true, leagueId: true },
+  });
+  if (!match) return { error: "Match not found." };
+
+  // Why: nullable persistence lets admins intentionally clear stale URLs so
+  // the poller can rediscover the current link via Gemini grounding.
+  await prisma.match.update({
+    where: { id: matchId },
+    data: { espncricinfoUrl: espncricinfoUrl ?? null },
+  });
+
+  revalidatePath(`/admin/league/${match.leagueId}`);
+  return {
+    data: {
+      matchId,
+      espncricinfoUrl: espncricinfoUrl ?? null,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

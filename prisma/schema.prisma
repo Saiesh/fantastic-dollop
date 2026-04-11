@@ -246,6 +246,8 @@ model Match {
   matchNumber                 Int         @map("match_number")
   team1Id                     String      @map("team1_id")
   team2Id                     String      @map("team2_id")
+  /// Why: persisting the source score URL avoids repeated discovery calls each poll cycle.
+  espncricinfoUrl             String?     @map("espncricinfo_url")
   startTimeUtc                DateTime    @map("start_time_utc")
   stage                       MatchStage  @default(league)
   /// Set by Super Admin when first innings ends — closes the Palat window.

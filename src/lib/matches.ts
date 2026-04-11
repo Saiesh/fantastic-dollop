@@ -70,6 +70,8 @@ export async function getMatchesForLeague(leagueId: string) {
     select: {
       id: true,
       matchNumber: true,
+      // Why: admin needs to view/edit the source URL used by cron scraping.
+      espncricinfoUrl: true,
       startTimeUtc: true,
       stage: true,
       status: true,

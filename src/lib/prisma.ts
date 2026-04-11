@@ -18,6 +18,10 @@ function getPool(): pg.Pool {
   if (globalForPrisma.pool) {
     return globalForPrisma.pool;
   }
+  // Why: On Vercel, `DATABASE_URL` should use Supabase’s *Transaction* pooler (port 6543,
+  // host like `…pooler.supabase.com`), not the direct host `db.<project>.supabase.co:5432`.
+  // The direct URL often fails from serverless with “Can’t reach database server” (IPv6 / routing).
+  // Prisma needs `?pgbouncer=true` on pooler URLs. Migrations use `MIGRATE_DATABASE_URL` (session pooler); see prisma.config.ts.
   const url = process.env.DATABASE_URL;
   if (!url) {
     throw new Error("DATABASE_URL is not set");

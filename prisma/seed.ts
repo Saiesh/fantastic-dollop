@@ -61,7 +61,7 @@ function matchDate(month: number, day: number, hourUtc: number): Date {
 
 // ---------------------------------------------------------------------------
 // IPL 2026 full league schedule (70 matches) — pairings, dates, and results
-// through completed fixtures as of 2026-04-11 (CREX / official order).
+// through match 17 as of 2026-04-11 (ESPN / official order).
 // ---------------------------------------------------------------------------
 
 type Outcome =
@@ -105,7 +105,7 @@ function buildIpl2026Fixtures(): FixtureDef[] {
     { matchNumber: 15, team1: "KKR", team2: "LSG", startTimeUtc: d(4, 9, 14), outcome: "team2_win" },
     { matchNumber: 16, team1: "RCB", team2: "RR", startTimeUtc: d(4, 10, 14), outcome: "team2_win" },
     // 2026-04-11: double-header — first fixture “live” for demo; second still upcoming
-    { matchNumber: 17, team1: "PBKS", team2: "SRH", startTimeUtc: d(4, 11, 10), outcome: "live_first_innings" },
+    { matchNumber: 17, team1: "PBKS", team2: "SRH", startTimeUtc: d(4, 11, 10), outcome: "team1_win" },
     { matchNumber: 18, team1: "CSK", team2: "DC", startTimeUtc: d(4, 11, 14), outcome: "upcoming" },
     { matchNumber: 19, team1: "GT", team2: "LSG", startTimeUtc: d(4, 12, 10), outcome: "upcoming" },
     { matchNumber: 20, team1: "MI", team2: "RCB", startTimeUtc: d(4, 12, 14), outcome: "upcoming" },
@@ -536,19 +536,20 @@ async function main(): Promise<void> {
     }
     console.log(`  ✔ ${playerIds.length} palat usage quotas`);
 
-    // ------ Team points table (standings after match 16 + NR for match 12) ------
-    // Why: counts mirror IPL rules (2 pts win, 1 pt no-result); NRR rounded for demo readability.
+    // ------ Team points table (standings after match 17, sourced from live ESPN API) ------
+    // Why: values from site.api.espn.com/apis/v2/sports/cricket/8048/standings?season=2026
+    // so the seed matches real-world IPL 2026 standings. The cron job keeps these current via standings-scraper.ts.
     const standings: { teamId: string; mp: number; w: number; l: number; nr: number; nrr: number; pts: number; rank: number }[] = [
-      { teamId: TEAM.RR, mp: 4, w: 4, l: 0, nr: 0, nrr: 2.403, pts: 8, rank: 1 },
-      { teamId: TEAM.PBKS, mp: 3, w: 2, l: 0, nr: 1, nrr: 0.637, pts: 5, rank: 2 },
-      { teamId: TEAM.RCB, mp: 3, w: 2, l: 1, nr: 0, nrr: 2.501, pts: 4, rank: 3 },
-      { teamId: TEAM.DC, mp: 3, w: 2, l: 1, nr: 0, nrr: 1.17, pts: 4, rank: 4 },
-      { teamId: TEAM.LSG, mp: 3, w: 2, l: 1, nr: 0, nrr: 0.42, pts: 4, rank: 5 },
-      { teamId: TEAM.GT, mp: 3, w: 1, l: 2, nr: 0, nrr: -0.31, pts: 2, rank: 6 },
-      { teamId: TEAM.MI, mp: 3, w: 1, l: 2, nr: 0, nrr: -0.12, pts: 2, rank: 7 },
-      { teamId: TEAM.SRH, mp: 3, w: 1, l: 2, nr: 0, nrr: -0.44, pts: 2, rank: 8 },
-      { teamId: TEAM.KKR, mp: 4, w: 0, l: 3, nr: 1, nrr: -0.85, pts: 1, rank: 9 },
-      { teamId: TEAM.CSK, mp: 3, w: 0, l: 3, nr: 0, nrr: -2.517, pts: 0, rank: 10 },
+      { teamId: TEAM.RR,   mp: 4, w: 4, l: 0, nr: 0, nrr:  2.055, pts: 8, rank: 1 },
+      { teamId: TEAM.PBKS, mp: 4, w: 3, l: 0, nr: 1, nrr:  0.720, pts: 7, rank: 2 },
+      { teamId: TEAM.RCB,  mp: 3, w: 2, l: 1, nr: 0, nrr:  1.231, pts: 4, rank: 3 },
+      { teamId: TEAM.DC,   mp: 3, w: 2, l: 1, nr: 0, nrr:  0.811, pts: 4, rank: 4 },
+      { teamId: TEAM.LSG,  mp: 3, w: 2, l: 1, nr: 0, nrr: -0.359, pts: 4, rank: 5 },
+      { teamId: TEAM.SRH,  mp: 4, w: 1, l: 3, nr: 0, nrr: -0.024, pts: 2, rank: 6 },
+      { teamId: TEAM.GT,   mp: 3, w: 1, l: 2, nr: 0, nrr: -0.270, pts: 2, rank: 7 },
+      { teamId: TEAM.MI,   mp: 3, w: 1, l: 2, nr: 0, nrr: -0.715, pts: 2, rank: 8 },
+      { teamId: TEAM.KKR,  mp: 4, w: 0, l: 3, nr: 1, nrr: -1.315, pts: 1, rank: 9 },
+      { teamId: TEAM.CSK,  mp: 3, w: 0, l: 3, nr: 0, nrr: -2.517, pts: 0, rank: 10 },
     ];
 
     for (const s of standings) {

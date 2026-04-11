@@ -1,12 +1,14 @@
 import "server-only";
 
+import { findCurrentIPLMatch } from "@/lib/cricketdata";
+
 // ---------------------------------------------------------------------------
 // ESPNCricinfo consumer API — live score polling for IPL matches.
 //
-// Why: We scrape the public consumer API (no key needed) to get live score,
-// toss, and innings status so the UI can auto-update without admin action.
-// Defensive parsing throughout because this API can change structure without
-// notice; missing fields should never crash the app.
+// Why kept: The Cricinfo consumer API is used as a fallback when cricketdata.org
+// does not have the match yet (e.g. very early polling, quota exhausted).
+// getLiveScore() now tries cricketdata first; this file handles the fallback
+// path and the getMatchUpdates() commentary feature.
 // ---------------------------------------------------------------------------
 
 const CRICINFO_BASE = "https://hs-consumer-api.espncricinfo.com/v1";
@@ -153,7 +155,7 @@ async function fetchMatchDetails(
 // short names are reliable for IPL.
 // ---------------------------------------------------------------------------
 
-function normShort(s: string): string {
+export function normShort(s: string): string {
   return s.toLowerCase().replace(/[^a-z]/g, "");
 }
 
@@ -267,7 +269,7 @@ export async function getLiveScore(
   const key = cacheKey(team1Short, team2Short);
   const now = Date.now();
 
-  // Return cached score if still fresh
+  // Return cached score if still fresh.
   const cached = scoreCache.get(key);
   if (cached && now - cached.cachedAt < SCORE_TTL_MS) {
     return cached.data;
@@ -284,13 +286,59 @@ export async function getLiveScore(
     cricinfoSeriesId: null,
   };
 
+  // ---------------------------------------------------------------------------
+  // Primary path: cricketdata.org API (authenticated, structured, no scraping).
+  //
+  // Why prefer this: Vercel server IPs are sometimes blocked by the Cricinfo
+  // Akamai CDN. The cricketdata.org API is accessed via an API key and is
+  // immune to IP-level blocking, making it the more reliable source.
+  // ---------------------------------------------------------------------------
+  const apiState = await findCurrentIPLMatch(team1Short, team2Short);
+
+  if (apiState) {
+    const innings: CricinfoInnings[] = apiState.innings.map((inn) => ({
+      inningsNumber: inn.inningsNumber,
+      // Why rename: CricinfoInnings uses battingTeamShort; CricketDataInnings
+      // uses battingTeamShortName. Map explicitly to keep public shape stable.
+      battingTeamShort: inn.battingTeamShortName,
+      runs: inn.runs,
+      wickets: inn.wickets,
+      overs: inn.overs,
+      isComplete: inn.isComplete,
+    }));
+
+    const isFirstInningsComplete =
+      innings.length >= 2 ||
+      (innings.length === 1 && innings[0].isComplete);
+
+    const result: CricinfoLiveScore = {
+      isLive: apiState.isLive,
+      statusText: apiState.statusText,
+      toss: apiState.toss,
+      innings,
+      isFirstInningsComplete,
+      matchEnded: apiState.matchEnded,
+      // Why null: cricketdata IDs are UUIDs, not the numeric Cricinfo IDs that
+      // getMatchUpdates() needs. The commentary feature degrades gracefully to
+      // an empty array when these are null.
+      cricinfoMatchId: null,
+      cricinfoSeriesId: null,
+    };
+
+    scoreCache.set(key, { data: result, cachedAt: now });
+    return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Fallback: ESPNCricinfo consumer API (unauthenticated, may be IP-blocked).
+  // ---------------------------------------------------------------------------
   const raw = await fetchCurrentMatches();
   if (!raw) {
     scoreCache.set(key, { data: notLive, cachedAt: now });
     return notLive;
   }
 
-  // Dig through the response structure defensively
+  // Dig through the response structure defensively.
   const content = obj((raw as Record<string, unknown>).content);
   const matchesRaw = arr(
     content.matches ??
@@ -320,7 +368,8 @@ export async function getLiveScore(
     return notLive;
   }
 
-  // Cache the Cricinfo match IDs so we don't need to re-search
+  // Cache Cricinfo IDs so getMatchUpdates() can fetch commentary without
+  // re-searching the full current-matches list.
   matchIdCache.set(key, {
     objectId: found.objectId,
     seriesId: found.seriesId,
