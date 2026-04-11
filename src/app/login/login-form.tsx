@@ -39,10 +39,11 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
   const [resolvedDisplayName, setResolvedDisplayName] = useState<string | null>(
     () => displayNameFromUrl?.trim() || null,
   );
-  const [storageChecked, setStorageChecked] = useState(
-    () => Boolean(displayNameFromUrl?.trim()),
-  );
 
+  // Why: sessionStorage check is an optimisation (pre-filling name from the join flow) and must not
+  // block form rendering. On iOS, useEffect can be delayed by the WebKit engine, which would leave
+  // the page stuck on a loading placeholder. Always render the form immediately; the effect updates
+  // the name if it finds a stored value.
   useEffect(() => {
     if (displayNameFromUrl?.trim()) return;
     try {
@@ -50,8 +51,6 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
       if (stored) setResolvedDisplayName(stored);
     } catch {
       /* storage may be unavailable in private mode */
-    } finally {
-      setStorageChecked(true);
     }
   }, [displayNameFromUrl]);
 
@@ -66,14 +65,6 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
       router.push("/");
     }
   }, [state, router]);
-
-  if (!storageChecked) {
-    return (
-      <p className="text-center text-sm text-muted-foreground" aria-live="polite">
-        Loading sign-in…
-      </p>
-    );
-  }
 
   return (
     <form action={formAction} className="flex w-full flex-col gap-4">
