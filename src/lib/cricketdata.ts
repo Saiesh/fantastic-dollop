@@ -203,6 +203,30 @@ function buildTossText(
 }
 
 // ---------------------------------------------------------------------------
+// Extract winner from the status string.
+//
+// Why: the CricAPI consistently returns matchWinner as null even for ended
+// matches. The winner is only available in the status string, e.g.
+// "Punjab Kings won by 6 wkts" or "RR won by 27 runs - 11 overs game due to rain".
+// We parse the team name before "won by" and resolve it to a short name.
+// ---------------------------------------------------------------------------
+
+function extractWinnerFromStatus(
+  status: string,
+  teamInfos: RawTeamInfo[],
+): string | null {
+  const m = status.match(/^(.+?)\s+won\s+by\b/i);
+  if (!m) return null;
+
+  const winnerName = m[1].trim();
+  // Resolve full name → short name via teamInfo, fall back to raw name.
+  const ti = teamInfos.find(
+    (t) => normShort(t.name) === normShort(winnerName),
+  );
+  return ti?.shortname ?? winnerName;
+}
+
+// ---------------------------------------------------------------------------
 // Determine match phase from raw API fields
 // ---------------------------------------------------------------------------
 
@@ -212,8 +236,13 @@ function deriveMatchPhase(
   if (!match.matchStarted) return "not_started";
 
   if (match.matchEnded) {
-    // Why: matchEnded with no matchWinner = abandoned / no result (rain, etc.)
-    return match.matchWinner ? "completed" : "abandoned";
+    // Why: check status string for "won by" rather than matchWinner — the API
+    // returns matchWinner as null even for completed matches; the status text
+    // is the only reliable source for the result type.
+    const hasWinner =
+      !!match.matchWinner ||
+      /\bwon\s+by\b/i.test(match.status);
+    return hasWinner ? "completed" : "abandoned";
   }
 
   // Why: innings count in score[] is the most reliable phase indicator —
@@ -271,12 +300,16 @@ function mapMatch(raw: RawMatch): CricketDataMatchState {
     parseInnings(s, idx, scoreArr.length, raw.matchEnded, teamInfos),
   );
 
-  // Resolve winner full name → short name.
-  const matchWinnerShortName = raw.matchWinner
-    ? (teamInfos.find(
-        (ti) => normShort(ti.name) === normShort(raw.matchWinner!),
-      )?.shortname ?? raw.matchWinner)
-    : null;
+  // Why: prefer extractWinnerFromStatus over raw.matchWinner — the API
+  // consistently returns matchWinner as null even for completed matches,
+  // so the status string is the authoritative source for the winner.
+  const matchWinnerShortName =
+    extractWinnerFromStatus(raw.status, teamInfos) ??
+    (raw.matchWinner
+      ? (teamInfos.find(
+          (ti) => normShort(ti.name) === normShort(raw.matchWinner!),
+        )?.shortname ?? raw.matchWinner)
+      : null);
 
   return {
     matchId: raw.id,
@@ -293,10 +326,26 @@ function mapMatch(raw: RawMatch): CricketDataMatchState {
 }
 
 // ---------------------------------------------------------------------------
-// Team matching — check if both our teams appear in a raw match entry.
+// IPL series filter — only consider matches from the men's Indian Premier
+// League, not the WPL or other domestic T20s.
 //
-// Why two strategies: CricAPI sometimes uses full names in `teams[]` and
-// short names in `teamInfo[].shortname`. We check both to maximise coverage.
+// Why: CricAPI returns "RCBW" as the shortname for the men's RCB team, which
+// is also the shortname used for the women's RCB team. Filtering by the
+// match name containing "Indian Premier League" before any team comparison
+// eliminates the ambiguity without resorting to fragile prefix matching.
+// ---------------------------------------------------------------------------
+
+function isIPLMatch(raw: RawMatch): boolean {
+  return raw.name.toLowerCase().includes("indian premier league");
+}
+
+// ---------------------------------------------------------------------------
+// Team matching — check if both our teams appear in a raw IPL match entry.
+//
+// Why full-name first: the teams[] array always contains the full team name
+// ("Royal Challengers Bengaluru"), which is unambiguous. We fall back to the
+// teamInfo shortname only when the full name doesn't normalize to a match,
+// since shortnames can have CricAPI inconsistencies (e.g. "RCBW" for men's RCB).
 // ---------------------------------------------------------------------------
 
 function matchHasTeams(
@@ -304,10 +353,13 @@ function matchHasTeams(
   ourTeam1Short: string,
   ourTeam2Short: string,
 ): boolean {
+  // Only match against IPL fixtures to avoid cross-tournament false positives.
+  if (!isIPLMatch(raw)) return false;
+
   const n1 = normShort(ourTeam1Short);
   const n2 = normShort(ourTeam2Short);
 
-  // Build a set of all normalised identifiers available in this match entry.
+  // Build a set of all normalised identifiers from this match entry.
   const allNorm = new Set<string>();
   for (const t of raw.teams) allNorm.add(normShort(t));
   for (const ti of raw.teamInfo ?? []) {
