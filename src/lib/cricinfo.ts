@@ -258,6 +258,125 @@ function parseCricinfoMatch(raw: Record<string, unknown>): {
   };
 }
 
+type ParsedCricinfoMatch = ReturnType<typeof parseCricinfoMatch>;
+
+interface CricinfoMatchFindResult {
+  parsed: ParsedCricinfoMatch;
+  raw: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Locate a fixture in Cricinfo "current matches" — shared by score + IDs.
+// ---------------------------------------------------------------------------
+
+function extractMatchesArrayFromPayload(root: unknown): unknown[] {
+  const o = obj(root as Record<string, unknown>);
+  const content = obj(o.content);
+  return arr(
+    content.matches ?? o.matches ?? content.currentMatches ?? [],
+  );
+}
+
+function findTeamMatchInList(
+  matchesRaw: unknown[],
+  team1Short: string,
+  team2Short: string,
+): CricinfoMatchFindResult | null {
+  for (const m of matchesRaw) {
+    const raw = obj(m);
+    const parsed = parseCricinfoMatch(raw);
+    const t1Matches =
+      shortNamesMatch(parsed.team1Short, team1Short) ||
+      shortNamesMatch(parsed.team1Short, team2Short);
+    const t2Matches =
+      shortNamesMatch(parsed.team2Short, team1Short) ||
+      shortNamesMatch(parsed.team2Short, team2Short);
+    if (t1Matches && t2Matches) {
+      return { parsed, raw };
+    }
+  }
+  return null;
+}
+
+/**
+ * Fetches Cricinfo current-matches JSON and returns the row for this pair.
+ * Why: one shared lookup powers score fallback, ID caching for commentary,
+ * and optional enrichment when cricketdata.org supplies the score.
+ */
+async function findCricinfoMatchForTeams(
+  team1Short: string,
+  team2Short: string,
+): Promise<CricinfoMatchFindResult | null> {
+  const raw = await fetchCurrentMatches();
+  if (!raw) return null;
+  const matchesRaw = extractMatchesArrayFromPayload(raw);
+  return findTeamMatchInList(matchesRaw, team1Short, team2Short);
+}
+
+/**
+ * Derive whether the fixture is actively in progress (vs scheduled/completed).
+ * Why: the fallback path previously set isLive: true for every list hit, which
+ * mis-labelled upcoming or finished games that still appear in the feed.
+ */
+function inferIsLiveFromCricinfoRaw(
+  raw: Record<string, unknown>,
+  parsed: ParsedCricinfoMatch,
+): boolean {
+  if (parsed.matchEnded) return false;
+
+  const state = str(raw.state ?? raw.matchState ?? "").toLowerCase();
+  if (state === "post" || state === "complete" || state === "finished") {
+    return false;
+  }
+  if (state === "live" || state === "in") {
+    return true;
+  }
+
+  const combined = `${parsed.statusText} ${str(raw.status)} ${str(raw.statusText)}`.toLowerCase();
+  if (/\b(abandoned|won by|match tied|no result)\b/iu.test(combined)) {
+    return false;
+  }
+  if (combined.includes("scheduled") && !combined.includes("live")) {
+    return false;
+  }
+
+  if (parsed.innings.some((inn) => !inn.isComplete)) return true;
+
+  if (parsed.innings.length === 0) {
+    return (
+      state === "live" ||
+      state === "in" ||
+      combined.includes("opt to") ||
+      combined.includes("toss")
+    );
+  }
+
+  return !parsed.innings.every((inn) => inn.isComplete);
+}
+
+/**
+ * Best-effort Cricinfo ID cache when commentary runs but getLiveScore returned
+ * a cached cricketdata payload (IDs were never resolved in that process).
+ */
+async function ensureCricinfoIdsCached(
+  team1Short: string,
+  team2Short: string,
+): Promise<void> {
+  const key = cacheKey(team1Short, team2Short);
+  const now = Date.now();
+  const existing = matchIdCache.get(key);
+  if (existing && now - existing.cachedAt < MATCH_ID_TTL_MS) return;
+
+  const found = await findCricinfoMatchForTeams(team1Short, team2Short);
+  if (!found || !found.parsed.objectId || !found.parsed.seriesId) return;
+
+  matchIdCache.set(key, {
+    objectId: found.parsed.objectId,
+    seriesId: found.parsed.seriesId,
+    cachedAt: now,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Main export — find and return live score for a match by team short names
 // ---------------------------------------------------------------------------
@@ -296,6 +415,17 @@ export async function getLiveScore(
   const apiState = await findCurrentIPLMatch(team1Short, team2Short);
 
   if (apiState) {
+    // Why: resolve numeric Cricinfo IDs in parallel so getMatchUpdates() can
+    // load commentary even though cricketdata uses its own UUID match ids.
+    const cricinfoRow = await findCricinfoMatchForTeams(team1Short, team2Short);
+    if (cricinfoRow && cricinfoRow.parsed.objectId && cricinfoRow.parsed.seriesId) {
+      matchIdCache.set(key, {
+        objectId: cricinfoRow.parsed.objectId,
+        seriesId: cricinfoRow.parsed.seriesId,
+        cachedAt: now,
+      });
+    }
+
     const innings: CricinfoInnings[] = apiState.innings.map((inn) => ({
       inningsNumber: inn.inningsNumber,
       // Why rename: CricinfoInnings uses battingTeamShort; CricketDataInnings
@@ -318,11 +448,8 @@ export async function getLiveScore(
       innings,
       isFirstInningsComplete,
       matchEnded: apiState.matchEnded,
-      // Why null: cricketdata IDs are UUIDs, not the numeric Cricinfo IDs that
-      // getMatchUpdates() needs. The commentary feature degrades gracefully to
-      // an empty array when these are null.
-      cricinfoMatchId: null,
-      cricinfoSeriesId: null,
+      cricinfoMatchId: cricinfoRow?.parsed.objectId ?? null,
+      cricinfoSeriesId: cricinfoRow?.parsed.seriesId ?? null,
     };
 
     scoreCache.set(key, { data: result, cachedAt: now });
@@ -332,63 +459,35 @@ export async function getLiveScore(
   // ---------------------------------------------------------------------------
   // Fallback: ESPNCricinfo consumer API (unauthenticated, may be IP-blocked).
   // ---------------------------------------------------------------------------
-  const raw = await fetchCurrentMatches();
-  if (!raw) {
-    scoreCache.set(key, { data: notLive, cachedAt: now });
-    return notLive;
-  }
-
-  // Dig through the response structure defensively.
-  const content = obj((raw as Record<string, unknown>).content);
-  const matchesRaw = arr(
-    content.matches ??
-    (raw as Record<string, unknown>).matches ??
-    content.currentMatches ??
-    [],
-  );
-
-  let found: ReturnType<typeof parseCricinfoMatch> | null = null;
-
-  for (const m of matchesRaw) {
-    const parsed = parseCricinfoMatch(obj(m));
-    const t1Matches =
-      shortNamesMatch(parsed.team1Short, team1Short) ||
-      shortNamesMatch(parsed.team1Short, team2Short);
-    const t2Matches =
-      shortNamesMatch(parsed.team2Short, team1Short) ||
-      shortNamesMatch(parsed.team2Short, team2Short);
-    if (t1Matches && t2Matches) {
-      found = parsed;
-      break;
-    }
-  }
-
+  const found = await findCricinfoMatchForTeams(team1Short, team2Short);
   if (!found) {
     scoreCache.set(key, { data: notLive, cachedAt: now });
     return notLive;
   }
 
+  const { parsed, raw } = found;
+
   // Cache Cricinfo IDs so getMatchUpdates() can fetch commentary without
   // re-searching the full current-matches list.
   matchIdCache.set(key, {
-    objectId: found.objectId,
-    seriesId: found.seriesId,
+    objectId: parsed.objectId,
+    seriesId: parsed.seriesId,
     cachedAt: now,
   });
 
   const isFirstInningsComplete =
-    found.innings.length >= 2 ||
-    (found.innings.length === 1 && found.innings[0].isComplete);
+    parsed.innings.length >= 2 ||
+    (parsed.innings.length === 1 && parsed.innings[0].isComplete);
 
   const result: CricinfoLiveScore = {
-    isLive: true,
-    statusText: found.statusText,
-    toss: found.toss,
-    innings: found.innings,
+    isLive: inferIsLiveFromCricinfoRaw(raw, parsed),
+    statusText: parsed.statusText,
+    toss: parsed.toss,
+    innings: parsed.innings,
     isFirstInningsComplete,
-    matchEnded: found.matchEnded,
-    cricinfoMatchId: found.objectId || null,
-    cricinfoSeriesId: found.seriesId || null,
+    matchEnded: parsed.matchEnded,
+    cricinfoMatchId: parsed.objectId || null,
+    cricinfoSeriesId: parsed.seriesId || null,
   };
 
   scoreCache.set(key, { data: result, cachedAt: now });
@@ -421,6 +520,12 @@ export async function getMatchUpdates(
   if (!ids || now - ids.cachedAt > MATCH_ID_CACHE_TTL_MS) {
     // Piggyback on getLiveScore to populate the cache
     await getLiveScore(team1Short, team2Short);
+    ids = matchIdCache.get(key);
+  }
+  // Why: a hot scoreCache hit skips getLiveScore's network path, so IDs may
+  // still be missing — run a dedicated ID lookup for commentary.
+  if (!ids || !ids.objectId || !ids.seriesId) {
+    await ensureCricinfoIdsCached(team1Short, team2Short);
     ids = matchIdCache.get(key);
   }
   if (!ids || !ids.objectId || !ids.seriesId) return [];

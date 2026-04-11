@@ -311,10 +311,14 @@ function mapMatch(raw: RawMatch): CricketDataMatchState {
         )?.shortname ?? raw.matchWinner)
       : null);
 
+  // Why: CricAPI sometimes lags matchStarted while score[] is already populated;
+  // treating any score row as in-progress avoids isLive: false during live play.
+  const hasScoreData = (raw.score?.length ?? 0) > 0;
+
   return {
     matchId: raw.id,
     seriesId: raw.series_id ?? "",
-    isLive: raw.matchStarted && !raw.matchEnded,
+    isLive: !raw.matchEnded && (raw.matchStarted || hasScoreData),
     matchStarted: raw.matchStarted,
     matchEnded: raw.matchEnded,
     statusText: raw.status,

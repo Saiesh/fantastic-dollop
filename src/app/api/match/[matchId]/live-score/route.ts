@@ -31,12 +31,13 @@ export async function GET(
   // We still try even for "upcoming" status in case Cricinfo has data
   // (e.g. toss has happened but admin hasn't set status to live yet).
   // The getLiveScore call is cheap (cached 20 s server-side).
-  const [liveScore, updates] = await Promise.all([
-    getLiveScore(match.team1.shortName, match.team2.shortName),
-    isLiveOrRecent
-      ? getMatchUpdates(match.team1.shortName, match.team2.shortName, 5)
-      : Promise.resolve([]),
-  ]);
+  //
+  // Why sequential: getLiveScore may populate Cricinfo match IDs when cricketdata
+  // supplies the score; getMatchUpdates needs those IDs — Promise.all raced them.
+  const liveScore = await getLiveScore(match.team1.shortName, match.team2.shortName);
+  const updates = isLiveOrRecent
+    ? await getMatchUpdates(match.team1.shortName, match.team2.shortName, 5)
+    : [];
 
   return NextResponse.json(
     {

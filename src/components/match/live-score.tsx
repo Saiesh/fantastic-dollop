@@ -60,6 +60,17 @@ interface LiveScoreProps {
 
 const POLL_INTERVAL_MS = 30_000; // 30 seconds
 
+/** True when the payload has anything useful to render (not only isLive). */
+function hasScoreContent(ls: LiveScorePayload): boolean {
+  return (
+    ls.isLive ||
+    ls.matchEnded ||
+    ls.innings.length > 0 ||
+    !!ls.statusText?.trim() ||
+    !!ls.toss
+  );
+}
+
 function scoreLabel(inn: LiveInnings): string {
   return `${inn.runs}/${inn.wickets} (${inn.overs} ov)`;
 }
@@ -172,7 +183,9 @@ export function LiveScore({
       initialStatus === "live_first_innings" ||
       initialStatus === "live_second_innings" ||
       // Also poll if current data shows it's live (status may lag behind)
-      data?.liveScore.isLive;
+      data?.liveScore.isLive ||
+      // Why: cricketdata/Cricinfo may set isLive false briefly while innings exist.
+      (data?.liveScore ? hasScoreContent(data.liveScore) : false);
 
     if (!isLiveStatus) return;
 
@@ -181,7 +194,7 @@ export function LiveScore({
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [fetchScore, initialStatus, data?.liveScore.isLive]);
+  }, [fetchScore, initialStatus, data?.liveScore]);
 
   // Show nothing when there's no live data and match isn't marked live in DB
   const isDbLive =
@@ -190,7 +203,11 @@ export function LiveScore({
 
   if (loading && !isDbLive) return null;
   if (loading) return <LiveScoreSkeleton />;
-  if (error || !data?.liveScore.isLive) {
+  if (
+    error ||
+    !data?.liveScore ||
+    !hasScoreContent(data.liveScore)
+  ) {
     // Show minimal "live" placeholder if DB says live but Cricinfo hasn't updated yet
     if (!isDbLive) return null;
     return (
@@ -289,7 +306,7 @@ export function LiveScore({
       ) : null}
 
       <p className="text-right text-xs text-muted-foreground">
-        via ESPNCricinfo · updates every 30 s
+        Live data · refreshed every 30 s
       </p>
     </Card>
   );
