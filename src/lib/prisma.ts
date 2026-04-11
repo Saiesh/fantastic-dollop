@@ -33,6 +33,7 @@ export const prisma: PrismaClient =
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+// Why: always cache on globalThis so warm Vercel invocations reuse the same
+// client + pg.Pool instead of creating a new pool per request, which would
+// exhaust the database's connection limit under any real load.
+globalForPrisma.prisma = prisma;
