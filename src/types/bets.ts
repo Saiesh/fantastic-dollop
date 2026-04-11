@@ -17,6 +17,11 @@ export interface MatchDTO {
   winnerId: string | null;
   /** ISO string or null — marks end of the Palat window */
   firstInningsCompleteTimeUtc: string | null;
+  /**
+   * Why: the live-score route uses this to fall back to HTML scraping when
+   * the cricketdata.org API returns no data. Null when not yet discovered.
+   */
+  espncricinfoUrl: string | null;
 }
 
 export interface TeamBriefDTO {

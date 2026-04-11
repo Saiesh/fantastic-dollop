@@ -30,6 +30,10 @@ const MATCH_SELECT = {
   team2Id: true,
   team1: { select: TEAM_BRIEF_SELECT },
   team2: { select: TEAM_BRIEF_SELECT },
+  // Why: the live-score route needs this URL to fall back to HTML scraping
+  // when cricketdata.org returns no data (plan: Replace ESPNCricinfo API with
+  // HTML Scraping, step 1).
+  espncricinfoUrl: true,
 } as const;
 
 // Inferred row shape from the Prisma select so the DTO mapper stays in sync
@@ -49,6 +53,9 @@ function toMatchDTO(row: MatchRow): MatchDTO {
     winnerId: row.winnerId,
     firstInningsCompleteTimeUtc:
       row.firstInningsCompleteTimeUtc?.toISOString() ?? null,
+    // Why: propagate the scraped URL so the live-score route can pass it to
+    // getLiveScore() / getMatchUpdates() without a second DB round-trip.
+    espncricinfoUrl: row.espncricinfoUrl,
   };
 }
 
