@@ -1,23 +1,14 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-import { login, type LoginResult } from "@/lib/actions/auth";
+import { login } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 
 /** Why: join page writes the typed display name here so `/login` can sign in without asking again. */
 const PENDING_DISPLAY_NAME_KEY = "fanbet_pending_display_name";
-
-async function submitLogin(
-  _prev: LoginResult | null,
-  formData: FormData,
-): Promise<LoginResult | null> {
-  const displayName = String(formData.get("displayName") ?? "");
-  const password = String(formData.get("password") ?? "");
-  return login({ displayName, password });
-}
 
 interface LoginFormProps {
   /** Why: `?displayName=` from shareable links encodes who is signing in without a second name field. */
@@ -33,19 +24,20 @@ const inputClass =
  */
 export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
   const router = useRouter();
-  const [state, formAction, isPending] = useActionState(submitLogin, null);
   const redirected = useRef(false);
 
   const [resolvedDisplayName, setResolvedDisplayName] = useState<string | null>(
     () => displayNameFromUrl?.trim() || null,
   );
 
-  // Why: sessionStorage check is an optimisation (pre-filling name from the join flow) and must not
-  // block form rendering. On iOS, useEffect can be delayed by the WebKit engine, which would leave
-  // the page stuck on a loading placeholder. Always render the form immediately; the effect updates
-  // the name if it finds a stored value.
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Why: sessionStorage pre-fill must not block first paint — on iOS, delayed effects can strand a loading state; `useEffect` (not `useLayoutEffect`) reads storage after paint.
   useEffect(() => {
-    if (displayNameFromUrl?.trim()) return;
+    if (displayNameFromUrl?.trim()) {
+      return;
+    }
     try {
       const stored = sessionStorage.getItem(PENDING_DISPLAY_NAME_KEY)?.trim();
       if (stored) setResolvedDisplayName(stored);
@@ -54,20 +46,38 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
     }
   }, [displayNameFromUrl]);
 
-  useEffect(() => {
-    if (state?.ok && !redirected.current) {
-      redirected.current = true;
-      try {
-        sessionStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
-      } catch {
-        /* ignore */
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (redirected.current) return;
+
+    const form = event.currentTarget;
+    const fd = new FormData(form);
+    const displayName =
+      resolvedDisplayName ?? String(fd.get("displayName") ?? "").trim();
+    const password = String(fd.get("password") ?? "");
+
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const result = await login({ displayName, password });
+      if (result.ok) {
+        redirected.current = true;
+        try {
+          sessionStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
+        } catch {
+          /* ignore */
+        }
+        router.push("/");
+      } else {
+        setError(result.error);
       }
-      router.push("/");
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [state, router]);
+  }
 
   return (
-    <form action={formAction} className="flex w-full flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
       {resolvedDisplayName ? (
         <>
           {/* Why: URL or join flow already fixed the name — keep a single password field for a shorter path. */}
@@ -106,20 +116,20 @@ export function LoginForm({ displayNameFromUrl }: LoginFormProps) {
           className={inputClass}
         />
       </div>
-      {state != null && !state.ok ? (
+      {error != null ? (
         <p className="text-sm text-destructive" role="alert">
-          {state.error}
+          {error}
         </p>
       ) : null}
       <button
         type="submit"
-        disabled={isPending}
+        disabled={isSubmitting}
         className={cn(
           "rounded-xl bg-gradient-to-r from-accent to-amber-500 px-4 py-3 text-sm font-bold text-accent-foreground shadow-md shadow-amber-900/25 transition hover:brightness-110",
           "disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >
-        {isPending ? "Signing in…" : "Sign in"}
+        {isSubmitting ? "Signing in…" : "Sign in"}
       </button>
       <p className="text-center text-sm text-muted-foreground">
         New here?{" "}

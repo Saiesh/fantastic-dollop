@@ -4,8 +4,9 @@ import { getMatchById, isBettingOpen, isPalatWindowOpen } from "@/lib/matches";
 import { getGroupBetsForMatch, getUserBetForMatch } from "@/lib/bets";
 import { getOrCreatePalatUsage, palatStageForMatch } from "@/lib/palat";
 import { prisma } from "@/lib/prisma";
-import { BetForm } from "@/components/match/bet-form";
 import { GroupBets } from "@/components/match/group-bets";
+import { MatchLiveSection } from "@/components/match/match-live-section";
+import { MatchTrivia } from "@/components/match/match-trivia";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Countdown } from "@/components/ui/countdown";
@@ -68,8 +69,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
     prisma.groupMembership.count({ where: { groupId } }),
   ]);
 
+  // Why: trivia section is shown only while betting is still open (>1 h before
+  // match) so it appears alongside the bet form as pre-match context.
+  const showTrivia = bettingOpen && match.status === "upcoming";
+
   return (
     <div className="mx-auto max-w-lg space-y-6">
+      {/* ------------------------------------------------------------------ */}
+      {/* Match header card                                                   */}
+      {/* ------------------------------------------------------------------ */}
       <Card className="overflow-hidden p-0 text-center">
         <div className="flex items-center justify-between border-b border-border/60 bg-muted/30 px-4 py-2">
           <span className="font-mono text-xs text-muted-foreground">Match #{match.matchNumber}</span>
@@ -166,10 +174,28 @@ export default async function MatchDetailPage({ params }: PageProps) {
         ) : null}
       </Card>
 
-      <BetForm
+      {/* ------------------------------------------------------------------ */}
+      {/* Some Trivia — shown for upcoming matches where betting is open      */}
+      {/* ------------------------------------------------------------------ */}
+      {showTrivia ? (
+        <MatchTrivia
+          matchId={matchId}
+          team1Name={match.team1.name}
+          team2Name={match.team2.name}
+          startTimeUtc={match.startTimeUtc}
+        />
+      ) : null}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Live score + Bet form — coordinated via MatchLiveSection client     */}
+      {/* wrapper so Cricinfo-detected innings end can disable Palat in-UI.   */}
+      {/* ------------------------------------------------------------------ */}
+      <MatchLiveSection
+        matchId={matchId}
+        matchStatus={match.status}
+        initialFirstInningsComplete={match.firstInningsCompleteTimeUtc !== null}
         userId={user.id}
         groupId={groupId}
-        matchId={matchId}
         team1={match.team1}
         team2={match.team2}
         isBettingOpen={bettingOpen}
@@ -178,6 +204,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
         palatUsage={palatUsage}
       />
 
+      {/* ------------------------------------------------------------------ */}
+      {/* Group bets                                                          */}
+      {/* ------------------------------------------------------------------ */}
       <GroupBets
         currentUserId={user.id}
         team1={match.team1}
@@ -190,6 +219,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
         }))}
       />
 
+      {/* ------------------------------------------------------------------ */}
+      {/* Points guide                                                        */}
+      {/* ------------------------------------------------------------------ */}
       <Card>
         <h3 className="mb-3 text-sm font-bold text-foreground">Points guide</h3>
         <dl className="space-y-2 text-xs">

@@ -55,12 +55,18 @@ export type JoinGroupResult =
         | "BANNED";
     };
 
+/** Why: union of failure reasons so the join UI can explain invalid codes vs data vs infra instead of one generic “connection” message. */
+export type LeagueTeamsForInviteErrorCode =
+  | "INVALID_INVITE"
+  | "LOAD_FAILED"
+  | "NO_TEAMS";
+
 export type LeagueTeamsForInviteResult =
   | {
       ok: true;
       teams: { id: string; name: string; shortName: string; primaryColor: string | null }[];
     }
-  | { ok: false; error: "INVALID_INVITE" };
+  | { ok: false; error: LeagueTeamsForInviteErrorCode };
 
 const LoginSchema = z.object({
   displayName: z.string().min(1).max(50),
@@ -110,16 +116,25 @@ export async function login(input: unknown): Promise<LoginResult> {
 /**
  * Resolves the invite to a league and returns teams eligible for home-team pick.
  * Why: drives the join form dropdown with the same roster the server will accept.
+ * Wraps DB work in try/catch so Prisma/network failures return LOAD_FAILED instead of
+ * rejecting the server-action promise (which forced a misleading “check connection” copy).
  */
 export async function getLeagueTeamsForInvite(
   rawInvite: string,
 ): Promise<LeagueTeamsForInviteResult> {
-  const group = await findGroupByInviteCode(rawInvite);
-  if (!group) {
-    return { ok: false, error: "INVALID_INVITE" };
+  try {
+    const group = await findGroupByInviteCode(rawInvite);
+    if (!group) {
+      return { ok: false, error: "INVALID_INVITE" };
+    }
+    const teams = await getEligibleHomeTeams(group.leagueId);
+    if (teams.length === 0) {
+      return { ok: false, error: "NO_TEAMS" };
+    }
+    return { ok: true, teams };
+  } catch {
+    return { ok: false, error: "LOAD_FAILED" };
   }
-  const teams = await getEligibleHomeTeams(group.leagueId);
-  return { ok: true, teams };
 }
 
 async function getClientRateLimitKey(): Promise<string> {

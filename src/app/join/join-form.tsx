@@ -1,46 +1,34 @@
 "use client";
 
-import { useActionState } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 import {
   joinGroupWithInvite,
   type JoinGroupResult,
+  type LeagueTeamsForInviteErrorCode,
+  type LeagueTeamsForInviteResult,
 } from "@/lib/actions/auth";
 
-type LeagueTeamsResponse =
-  | { ok: true; teams: TeamRow[] }
-  | { ok: false; error: string };
-
-async function fetchLeagueTeams(code: string): Promise<LeagueTeamsResponse> {
-  const res = await fetch(`/api/league-teams?code=${encodeURIComponent(code)}`);
-  if (!res.ok) throw new Error("network");
-  return res.json() as Promise<LeagueTeamsResponse>;
-}
-
-async function submitJoin(
-  _prev: JoinGroupResult | null,
-  formData: FormData,
-): Promise<JoinGroupResult | null> {
-  const inviteCode = String(formData.get("inviteCode") ?? "");
-  const rawName = formData.get("displayName");
-  const displayName =
-    rawName != null && String(rawName).trim() !== ""
-      ? String(rawName)
-      : undefined;
-  const rawHome = formData.get("homeTeamId");
-  const homeTeamId =
-    rawHome != null && String(rawHome).trim() !== ""
-      ? String(rawHome)
-      : undefined;
-  const rawPassword = formData.get("password");
-  const password =
-    rawPassword != null && String(rawPassword) !== ""
-      ? String(rawPassword)
-      : undefined;
-  return joinGroupWithInvite({ inviteCode, displayName, homeTeamId, password });
+/** Why: maps server error codes to copy users can act on (fix code vs organiser vs retry). */
+function messageForTeamsLoadError(
+  code: LeagueTeamsForInviteErrorCode | "MISSING_INVITE_CODE",
+): string {
+  switch (code) {
+    case "INVALID_INVITE":
+      return "That invite code is not valid. Check for typos or ask your organiser for a new code.";
+    case "MISSING_INVITE_CODE":
+      return "Invite code is required.";
+    case "NO_TEAMS":
+      return "This league has no teams linked yet. Ask your organiser to finish league setup before players join.";
+    case "LOAD_FAILED":
+      return "Could not load teams right now. Try again in a moment; if it keeps failing, contact support or your organiser.";
+    default: {
+      const _exhaustive: never = code;
+      return _exhaustive;
+    }
+  }
 }
 
 interface JoinFormProps {
@@ -55,17 +43,22 @@ const inputClass =
 
 export function JoinForm({ isSignedIn }: JoinFormProps) {
   const router = useRouter();
-  const [state, formAction, isPending] = useActionState(submitJoin, null);
   const redirected = useRef(false);
+  /** Why: browsers can autofill the invite field without firing `onChange`, leaving React state empty while the input looks filled — the ref lets us reconcile DOM → state. */
+  const inviteInputRef = useRef<HTMLInputElement>(null);
 
   const [inviteCode, setInviteCode] = useState("");
   const [teams, setTeams] = useState<TeamRow[] | null>(null);
   const [teamsLoading, setTeamsLoading] = useState(false);
-  /** Why: surfaced when getLeagueTeamsForInvite throws so mobile/network failures are visible instead of a silent empty state. */
+  /** Why: invite preview failures (invalid code, empty roster, DB) surface here; transport/framework failures still use .catch below. */
   const [teamsError, setTeamsError] = useState<string | null>(null);
   /** Why: bumping this re-runs the invite effect so "Try again" retries without changing the code. */
   const [teamsLoadRetry, setTeamsLoadRetry] = useState(0);
   const [homeTeamId, setHomeTeamId] = useState("");
+  /** Why: avoids React 19 form action wiring; direct await matches login flow and works on iOS Safari. */
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  /** Why: join action validation / business errors after submit. */
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const handleInviteChange = (value: string) => {
     setInviteCode(value);
@@ -77,6 +70,25 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
     }
   };
 
+  /** Why: password managers / iOS autofill often populate value after first paint without React events. */
+  const syncInviteFromDomIfNeeded = useCallback((): void => {
+    const el = inviteInputRef.current;
+    if (!el) return;
+    const domTrimmed = el.value.trim();
+    if (domTrimmed.length < 3) return;
+    setInviteCode((prev) => (prev.trim() === domTrimmed ? prev : el.value));
+  }, []);
+
+  // Why: late autofill can miss both mount and focus; short delayed reads catch most mobile browsers.
+  useEffect(() => {
+    const t0 = window.setTimeout(syncInviteFromDomIfNeeded, 0);
+    const t1 = window.setTimeout(syncInviteFromDomIfNeeded, 500);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+    };
+  }, [syncInviteFromDomIfNeeded]);
+
   useEffect(() => {
     const code = inviteCode.trim();
     if (code.length < 3) {
@@ -87,23 +99,36 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
       if (cancelled) return;
       setTeamsLoading(true);
       setTeamsError(null);
-      // Why: fetchLeagueTeams uses a plain JSON API route instead of a server action.
-      // Server action calls use the Next.js RSC wire-format streaming protocol, which
-      // iOS WebKit stalls on indefinitely. A standard fetch/JSON request is reliable
-      // across all browsers. The timeout is a safety net for genuinely slow connections.
+      // Why: plain JSON over standard HTTP avoids React server-action transport stalls on iOS Safari; timeout covers slow networks.
       const fetchTimeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("timeout")), 10_000),
       );
-      void Promise.race([fetchLeagueTeams(code), fetchTimeout])
-        .then((res) => {
+      void Promise.race([
+        fetch(`/api/teams?inviteCode=${encodeURIComponent(code)}`),
+        fetchTimeout,
+      ])
+        .then(async (res) => {
+          let data: LeagueTeamsForInviteResult | { ok: false; error: "MISSING_INVITE_CODE" };
+          try {
+            data = (await res.json()) as typeof data;
+          } catch {
+            if (cancelled) return;
+            setTeams(null);
+            setHomeTeamId("");
+            setTeamsError(
+              "Something went wrong loading teams (browser or network). Try again, or refresh the page.",
+            );
+            return;
+          }
           if (cancelled) return;
-          if (res.ok) {
-            setTeams(res.teams);
+          if (data.ok) {
+            setTeams(data.teams);
             setHomeTeamId("");
             setTeamsError(null);
           } else {
             setTeams(null);
             setHomeTeamId("");
+            setTeamsError(messageForTeamsLoadError(data.error));
           }
         })
         .catch(() => {
@@ -111,7 +136,7 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
           setTeams(null);
           setHomeTeamId("");
           setTeamsError(
-            "Couldn't load teams. Check your connection, then try again.",
+            "Something went wrong loading teams (browser or network). Try again, or refresh the page.",
           );
         })
         .finally(() => {
@@ -126,12 +151,46 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
     };
   }, [inviteCode, teamsLoadRetry]);
 
-  useEffect(() => {
-    if (state?.ok && !redirected.current) {
-      redirected.current = true;
-      router.push(`/group/${state.groupId}`);
+  async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setJoinError(null);
+    try {
+      const formData = new FormData(e.currentTarget);
+      const inviteCodeRaw = String(formData.get("inviteCode") ?? "");
+      const rawName = formData.get("displayName");
+      const displayName =
+        rawName != null && String(rawName).trim() !== ""
+          ? String(rawName)
+          : undefined;
+      const rawHome = formData.get("homeTeamId");
+      const homeTeamIdRaw =
+        rawHome != null && String(rawHome).trim() !== ""
+          ? String(rawHome)
+          : undefined;
+      const rawPassword = formData.get("password");
+      const passwordRaw =
+        rawPassword != null && String(rawPassword) !== ""
+          ? String(rawPassword)
+          : undefined;
+      const result: JoinGroupResult = await joinGroupWithInvite({
+        inviteCode: inviteCodeRaw,
+        displayName,
+        homeTeamId: homeTeamIdRaw,
+        password: passwordRaw,
+      });
+      if (result.ok) {
+        if (!redirected.current) {
+          redirected.current = true;
+          router.push(`/group/${result.groupId}`);
+        }
+      } else {
+        setJoinError(result.error);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [state, router]);
+  }
 
   const needsHomePick = teams !== null && teams.length > 0;
   const homePickReady = !needsHomePick || homeTeamId.length > 0;
@@ -140,7 +199,7 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
     teamsError != null && inviteCode.trim().length >= 3;
 
   return (
-    <form action={formAction} className="flex w-full flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
       <input type="hidden" name="homeTeamId" value={homeTeamId} />
       <div className="flex flex-col gap-1.5">
         <label htmlFor="inviteCode" className="text-sm font-medium text-foreground">
@@ -151,6 +210,7 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
           name="inviteCode"
           type="text"
           required
+          ref={inviteInputRef}
           autoComplete="off"
           // Why: iOS/Android keyboards often autocorrect or “fix” short tokens; invite codes must stay exact for the debounced fetch.
           autoCorrect="off"
@@ -161,6 +221,9 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
           inputMode="text"
           value={inviteCode}
           onChange={(e) => handleInviteChange(e.target.value)}
+          // Why: Safari sometimes emits `input` for autofill when `change` does not; keep state aligned either way.
+          onInput={(e) => handleInviteChange(e.currentTarget.value)}
+          onFocus={syncInviteFromDomIfNeeded}
           className={inputClass}
           placeholder="e.g. FANX7K"
         />
@@ -275,16 +338,16 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
         </div>
       ) : null}
 
-      {state != null && !state.ok ? (
+      {joinError != null ? (
         <p className="text-sm text-destructive" role="alert">
-          {state.error}
+          {joinError}
         </p>
       ) : null}
 
       <button
         type="submit"
         disabled={
-          isPending ||
+          isSubmitting ||
           teamsLoading ||
           teamsLoadBlockedSubmit ||
           !homePickReady
@@ -294,7 +357,7 @@ export function JoinForm({ isSignedIn }: JoinFormProps) {
           "disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >
-        {isPending ? "Joining…" : "Join group"}
+        {isSubmitting ? "Joining…" : "Join group"}
       </button>
     </form>
   );
