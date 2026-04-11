@@ -9,6 +9,11 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Why: Vercel build machines cannot reach Supabase's direct connection (port 5432)
+    // due to networking restrictions. MIGRATE_DATABASE_URL should point to Supabase's
+    // session pooler URL (Settings → Database → Connection string → Session mode) which
+    // IS reachable from build machines AND supports DDL/transactions needed for migrations.
+    // Falls back to DATABASE_URL for local dev where direct connections work fine.
+    url: process.env["MIGRATE_DATABASE_URL"] ?? process.env["DATABASE_URL"],
   },
 });
