@@ -19,6 +19,8 @@
       }
     ],
     "paths": {
+      // Prisma 7 outputs `client.ts` with no `index.ts`; map the package root so `@/generated/prisma` resolves for imports.
+      "@/generated/prisma": ["./src/generated/prisma/client.ts"],
       "@/*": ["./src/*"]
     }
   },

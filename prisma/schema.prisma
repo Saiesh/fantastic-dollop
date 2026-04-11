@@ -1,0 +1,400 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// League lifecycle: pre_season -> active -> completed.
+/// "settled" lives on Group, not League, because prize distribution is per-group.
+enum LeagueStatus {
+  pre_season
+  active
+  completed
+}
+
+/// Group lifecycle includes settlement since each group has its own prize pool.
+enum GroupStatus {
+  pre_season
+  active
+  completed
+  settled
+}
+
+/// PRD Section 3: Organiser creates/manages a Group; Player bets within it.
+enum MemberRole {
+  organiser
+  player
+}
+
+/// PRD Section 7.4: league stage vs four distinct playoff rounds.
+enum MatchStage {
+  league
+  qualifier_1
+  eliminator
+  qualifier_2
+  final
+}
+
+/// Outcome of a match — 'upcoming' is the default before the result is entered.
+enum MatchResult {
+  upcoming
+  team1_win
+  team2_win
+  draw
+  abandoned
+}
+
+/// Real-time match progress for controlling the Palat window.
+enum MatchStatus {
+  upcoming
+  live_first_innings
+  live_second_innings
+  completed
+  abandoned
+}
+
+/// PRD Section 6.2/6.4: standard or double-down wager.
+enum BetType {
+  standard
+  double_down
+}
+
+/// Palat quotas are tracked separately for league and playoff stages (PRD 6.3).
+enum PalatStage {
+  league
+  playoffs
+}
+
+/// Every source type that can generate points in the append-only ledger (PRD 5.4).
+enum PointSource {
+  bet
+  palat_bet
+  double_down_bet
+  draw
+  home_team_win
+  streak_birdie
+  streak_eagle
+  streak_albatross
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+/// A person who uses the app. Optional password hash enables login; otherwise identity is session-based (JWT).
+/// PRD Section 4.1: recognised by browser JWT; display name set on first join.
+model User {
+  id           String   @id @default(cuid())
+  displayName  String   @map("display_name")
+  /// scrypt salt+hash for password login; null for legacy session-only users until they set a password.
+  passwordHash String?  @map("password_hash")
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  createdLeagues  League[]          @relation("LeagueCreator")
+  organisedGroups Group[]           @relation("GroupOrganiser")
+  memberships     GroupMembership[]
+  bets            Bet[]
+  palatUsages     PalatUsage[]
+  streaks         Streak[]
+  pointsLedger    PointsLedger[]
+  /// Admin-enforced blocks so a user cannot rejoin any group in this league until unbanned.
+  leagueBans      LeagueBan[]
+
+  @@map("users")
+}
+
+/// The tournament itself (e.g. "IPL 2026"). Owns the master schedule, teams,
+/// and results. All Groups within a League share these matches.
+/// PRD Section 5.2: League — id, name, seasonYear, status, createdBy, createdAt.
+model League {
+  id         String       @id @default(cuid())
+  name       String
+  seasonYear Int          @map("season_year")
+  status     LeagueStatus @default(pre_season)
+  createdBy  String       @map("created_by")
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  /// Super Admin who created this league (PRD Section 3).
+  creator         User              @relation("LeagueCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  teams           LeagueTeam[]
+  matches         Match[]
+  groups          Group[]
+  teamPointsTable TeamPointsTable[]
+  bans            LeagueBan[]
+
+  @@map("leagues")
+}
+
+/// Global team catalogue. Shared across leagues via the LeagueTeam junction.
+/// PRD Section 5.2: Team — id, name, shortName, logoUrl, primaryColor.
+model Team {
+  id           String  @id @default(cuid())
+  name         String  @unique
+  shortName    String  @unique @map("short_name") @db.VarChar(5)
+  logoUrl      String? @map("logo_url")
+  primaryColor String? @map("primary_color") @db.VarChar(7)
+
+  leagueTeams     LeagueTeam[]
+  homeTeamMembers GroupMembership[] @relation("HomeTeam")
+  matchesAsTeam1  Match[]           @relation("Team1")
+  matchesAsTeam2  Match[]           @relation("Team2")
+  matchWins       Match[]           @relation("MatchWinner")
+  betsSelected    Bet[]             @relation("SelectedTeam")
+  betsPalat       Bet[]             @relation("PalatTeam")
+  teamPointsTable TeamPointsTable[]
+
+  @@map("teams")
+}
+
+/// Junction table scoping teams to a league. A league's team roster
+/// doesn't change mid-season, but different leagues can have different teams.
+model LeagueTeam {
+  leagueId String @map("league_id")
+  teamId   String @map("team_id")
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([leagueId, teamId])
+  @@map("league_teams")
+}
+
+/// A closed betting circle within a League — the core social unit.
+/// Each Group has its own invite code, buy-in, leaderboard, and prize pool.
+/// PRD Section 5.2: Group — id, leagueId, name, inviteCode, buyInAmount,
+/// currency, organiserId, status, createdAt.
+model Group {
+  id          String      @id @default(cuid())
+  leagueId    String      @map("league_id")
+  name        String
+  inviteCode  String      @unique @map("invite_code")
+  buyInAmount Decimal     @map("buy_in_amount") @db.Decimal(10, 2)
+  currency    String      @default("INR") @db.VarChar(3)
+  organiserId String      @map("organiser_id")
+  status      GroupStatus @default(pre_season)
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  league       League            @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  /// The user who created this group — also a player within it (PRD Section 3).
+  organiser    User              @relation("GroupOrganiser", fields: [organiserId], references: [id], onDelete: Restrict)
+  memberships  GroupMembership[]
+  bets         Bet[]
+  palatUsages  PalatUsage[]
+  streaks      Streak[]
+  pointsLedger PointsLedger[]
+
+  @@map("groups")
+}
+
+/// Links a User to a Group. The denormalized leagueId enables the
+/// "one Group per User per League" unique constraint without a join.
+/// PRD Section 5.2: GroupMembership — id, userId, groupId, leagueId
+/// (denormalized), homeTeamId, role, hasPaid, joinedAt.
+model GroupMembership {
+  id         String     @id @default(cuid())
+  userId     String     @map("user_id")
+  groupId    String     @map("group_id")
+  /// Denormalized from group.leagueId so the DB can enforce one-group-per-league.
+  leagueId   String     @map("league_id")
+  homeTeamId String     @map("home_team_id")
+  role       MemberRole @default(player)
+  hasPaid    Boolean    @default(false) @map("has_paid")
+  joinedAt   DateTime   @default(now()) @map("joined_at")
+
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  homeTeam Team  @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: Restrict)
+
+  /// Prevents a user from joining two groups in the same league (PRD Section 4.1).
+  @@unique([userId, leagueId])
+  @@map("group_memberships")
+}
+
+/// Records that a user is banned from participating in a league (any group within it).
+model LeagueBan {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  leagueId  String   @map("league_id")
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leagueId])
+  @@map("league_bans")
+}
+
+/// A single scheduled fixture within a League. Shared across all Groups.
+/// PRD Section 5.2: Match — id, leagueId, matchNumber, team1Id, team2Id,
+/// startTimeUTC, stage, firstInningsCompleteTimeUTC, winnerId, result,
+/// status, createdAt.
+model Match {
+  id                          String      @id @default(cuid())
+  leagueId                    String      @map("league_id")
+  matchNumber                 Int         @map("match_number")
+  team1Id                     String      @map("team1_id")
+  team2Id                     String      @map("team2_id")
+  startTimeUtc                DateTime    @map("start_time_utc")
+  stage                       MatchStage  @default(league)
+  /// Set by Super Admin when first innings ends — closes the Palat window.
+  firstInningsCompleteTimeUtc DateTime?   @map("first_innings_complete_time_utc")
+  winnerId                    String?     @map("winner_id")
+  result                      MatchResult @default(upcoming)
+  status                      MatchStatus @default(upcoming)
+  createdAt                   DateTime    @default(now()) @map("created_at")
+
+  league       League         @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  team1        Team           @relation("Team1", fields: [team1Id], references: [id], onDelete: Restrict)
+  team2        Team           @relation("Team2", fields: [team2Id], references: [id], onDelete: Restrict)
+  winner       Team?          @relation("MatchWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  bets         Bet[]
+  streaks      Streak[]       @relation("LastMatch")
+  pointsLedger PointsLedger[]
+
+  /// Each match number is unique within a league.
+  @@unique([leagueId, matchNumber])
+  /// Speeds up "upcoming matches" queries ordered by start time.
+  @@index([leagueId, startTimeUtc])
+  @@map("matches")
+}
+
+/// A player's prediction for a single match, scoped to their Group.
+/// PRD Section 5.2: Bet — id, userId, groupId, matchId, selectedTeamId,
+/// betType, hasPalated, palatTeamId, createdAt, lockedAt.
+model Bet {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  groupId        String   @map("group_id")
+  matchId        String   @map("match_id")
+  selectedTeamId String   @map("selected_team_id")
+  betType        BetType  @default(standard) @map("bet_type")
+  hasPalated     Boolean  @default(false) @map("has_palated")
+  palatTeamId    String?  @map("palat_team_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  lockedAt       DateTime @map("locked_at")
+
+  user         User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group        Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  match        Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  selectedTeam Team  @relation("SelectedTeam", fields: [selectedTeamId], references: [id], onDelete: Restrict)
+  palatTeam    Team? @relation("PalatTeam", fields: [palatTeamId], references: [id], onDelete: SetNull)
+
+  /// One bet per user per match per group (PRD Section 5.2).
+  @@unique([userId, matchId, groupId])
+  /// Speeds up fan-out scoring when a match result is entered.
+  @@index([matchId, groupId])
+  @@map("bets")
+}
+
+/// Tracks how many Palat switches a player has consumed within a Group,
+/// split by stage so league (max 7) and playoff (max 1) quotas are independent.
+/// PRD Section 5.2: PalatUsage — id, userId, groupId, stage, usedCount, maxAllowed.
+model PalatUsage {
+  id         String     @id @default(cuid())
+  userId     String     @map("user_id")
+  groupId    String     @map("group_id")
+  stage      PalatStage
+  usedCount  Int        @default(0) @map("used_count")
+  /// 7 for league stage, 1 for playoffs (PRD Section 6.3).
+  maxAllowed Int        @map("max_allowed")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  /// One quota record per user per group per stage.
+  @@unique([userId, groupId, stage])
+  @@map("palat_usages")
+}
+
+/// Running consecutive-win counter per player per Group. The bonus is
+/// awarded to the PointsLedger when the streak breaks (PRD Section 6.5).
+/// PRD Section 5.2: Streak — id, userId, groupId, currentStreak,
+/// lastMatchId, updatedAt.
+model Streak {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  groupId       String   @map("group_id")
+  currentStreak Int      @default(0) @map("current_streak")
+  lastMatchId   String?  @map("last_match_id")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  lastMatch Match? @relation("LastMatch", fields: [lastMatchId], references: [id], onDelete: SetNull)
+
+  /// One streak tracker per user per group.
+  @@unique([userId, groupId])
+  @@map("streaks")
+}
+
+/// Append-only audit log of every point award within a Group (PRD Section 5.4).
+/// The single source of truth — leaderboard totals are derived via
+/// SUM(points) WHERE groupId = ? GROUP BY userId.
+/// No rows are ever updated or deleted; corrections use compensating negative entries.
+model PointsLedger {
+  id        String      @id @default(cuid())
+  userId    String      @map("user_id")
+  groupId   String      @map("group_id")
+  matchId   String?     @map("match_id")
+  source    PointSource
+  points    Int
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  match Match? @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  /// Optimised for leaderboard: SUM(points) WHERE groupId GROUP BY userId.
+  @@index([groupId, userId])
+  /// Optimised for per-match point lookups during scoring fan-out.
+  @@index([matchId])
+  @@map("points_ledger")
+}
+
+/// Mirrors official IPL team standings. Belongs to the League (shared across
+/// all Groups) so players can see team form when placing bets (PRD Section 7.5).
+model TeamPointsTable {
+  id            String  @id @default(cuid())
+  leagueId      String  @map("league_id")
+  teamId        String  @map("team_id")
+  matchesPlayed Int     @default(0) @map("matches_played")
+  wins          Int     @default(0)
+  losses        Int     @default(0)
+  draws         Int     @default(0)
+  noResults     Int     @default(0) @map("no_results")
+  netRunRate    Decimal @default(0) @map("net_run_rate") @db.Decimal(6, 3)
+  points        Int     @default(0)
+  rank          Int     @default(0)
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  /// One standings row per team per league.
+  @@unique([leagueId, teamId])
+  @@map("team_points_table")
+}
+
+// ---------------------------------------------------------------------------
+// Note: LeaderboardView (PRD Section 5.2) is intentionally not a stored model.
+// It is computed from PointsLedger at query time:
+//   SELECT userId, groupId,
+//     SUM(CASE WHEN source IN ('bet','palat_bet','double_down_bet') THEN points END) AS betPoints,
+//     SUM(CASE WHEN source = 'home_team_win' THEN points END)                       AS homeTeamPoints,
+//     SUM(CASE WHEN source IN ('streak_birdie','streak_eagle','streak_albatross') THEN points END) AS streakBonusPoints,
+//     SUM(CASE WHEN source = 'draw' THEN points END)                                AS drawPoints,
+//     SUM(points) AS totalPoints
+//   FROM points_ledger WHERE groupId = ? GROUP BY userId
+// A SQL VIEW or materialised view can be added later if query performance requires it.
+// ---------------------------------------------------------------------------

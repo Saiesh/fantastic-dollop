@@ -1,0 +1,538 @@
+{
+  "schemaVersion": 1,
+  "seasonYear": 2026,
+  "leagueName": "Indian Premier League",
+  "sourceDescription": "Fixture order and team pairings mirror the IPL 2025 schedule (ESPNcricinfo). Calendar dates are shifted +1 year to 2026. Kickoff times use a simplified model: 7:30 PM IST for single-match days; on double-header days the first match is 3:30 PM IST and the second 7:30 PM IST. Replace with official times when available.",
+  "teamShortNames": [
+    "CSK",
+    "DC",
+    "GT",
+    "KKR",
+    "LSG",
+    "MI",
+    "PBKS",
+    "RCB",
+    "RR",
+    "SRH"
+  ],
+  "matches": [
+    {
+      "matchNumber": 1,
+      "team1Short": "KKR",
+      "team2Short": "RCB",
+      "startTimeUtc": "2026-03-22T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 2,
+      "team1Short": "SRH",
+      "team2Short": "RR",
+      "startTimeUtc": "2026-03-23T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 3,
+      "team1Short": "MI",
+      "team2Short": "CSK",
+      "startTimeUtc": "2026-03-23T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 4,
+      "team1Short": "LSG",
+      "team2Short": "DC",
+      "startTimeUtc": "2026-03-24T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 5,
+      "team1Short": "PBKS",
+      "team2Short": "GT",
+      "startTimeUtc": "2026-03-25T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 6,
+      "team1Short": "RR",
+      "team2Short": "KKR",
+      "startTimeUtc": "2026-03-26T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 7,
+      "team1Short": "SRH",
+      "team2Short": "LSG",
+      "startTimeUtc": "2026-03-27T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 8,
+      "team1Short": "RCB",
+      "team2Short": "CSK",
+      "startTimeUtc": "2026-03-28T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 9,
+      "team1Short": "GT",
+      "team2Short": "MI",
+      "startTimeUtc": "2026-03-29T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 10,
+      "team1Short": "SRH",
+      "team2Short": "DC",
+      "startTimeUtc": "2026-03-30T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 11,
+      "team1Short": "RR",
+      "team2Short": "CSK",
+      "startTimeUtc": "2026-03-30T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 12,
+      "team1Short": "KKR",
+      "team2Short": "MI",
+      "startTimeUtc": "2026-03-31T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 13,
+      "team1Short": "LSG",
+      "team2Short": "PBKS",
+      "startTimeUtc": "2026-04-01T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 14,
+      "team1Short": "RCB",
+      "team2Short": "GT",
+      "startTimeUtc": "2026-04-02T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 15,
+      "team1Short": "KKR",
+      "team2Short": "SRH",
+      "startTimeUtc": "2026-04-03T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 16,
+      "team1Short": "LSG",
+      "team2Short": "MI",
+      "startTimeUtc": "2026-04-04T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 17,
+      "team1Short": "DC",
+      "team2Short": "CSK",
+      "startTimeUtc": "2026-04-05T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 18,
+      "team1Short": "RR",
+      "team2Short": "PBKS",
+      "startTimeUtc": "2026-04-05T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 19,
+      "team1Short": "SRH",
+      "team2Short": "GT",
+      "startTimeUtc": "2026-04-06T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 20,
+      "team1Short": "RCB",
+      "team2Short": "MI",
+      "startTimeUtc": "2026-04-07T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 21,
+      "team1Short": "LSG",
+      "team2Short": "KKR",
+      "startTimeUtc": "2026-04-08T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 22,
+      "team1Short": "PBKS",
+      "team2Short": "CSK",
+      "startTimeUtc": "2026-04-08T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 23,
+      "team1Short": "GT",
+      "team2Short": "RR",
+      "startTimeUtc": "2026-04-09T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 24,
+      "team1Short": "RCB",
+      "team2Short": "DC",
+      "startTimeUtc": "2026-04-10T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 25,
+      "team1Short": "CSK",
+      "team2Short": "KKR",
+      "startTimeUtc": "2026-04-11T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 26,
+      "team1Short": "GT",
+      "team2Short": "LSG",
+      "startTimeUtc": "2026-04-12T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 27,
+      "team1Short": "PBKS",
+      "team2Short": "SRH",
+      "startTimeUtc": "2026-04-12T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 28,
+      "team1Short": "RR",
+      "team2Short": "RCB",
+      "startTimeUtc": "2026-04-13T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 29,
+      "team1Short": "MI",
+      "team2Short": "DC",
+      "startTimeUtc": "2026-04-13T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 30,
+      "team1Short": "LSG",
+      "team2Short": "CSK",
+      "startTimeUtc": "2026-04-14T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 31,
+      "team1Short": "PBKS",
+      "team2Short": "KKR",
+      "startTimeUtc": "2026-04-15T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 32,
+      "team1Short": "DC",
+      "team2Short": "RR",
+      "startTimeUtc": "2026-04-16T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 33,
+      "team1Short": "SRH",
+      "team2Short": "MI",
+      "startTimeUtc": "2026-04-17T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 34,
+      "team1Short": "RCB",
+      "team2Short": "PBKS",
+      "startTimeUtc": "2026-04-18T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 35,
+      "team1Short": "DC",
+      "team2Short": "GT",
+      "startTimeUtc": "2026-04-19T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 36,
+      "team1Short": "LSG",
+      "team2Short": "RR",
+      "startTimeUtc": "2026-04-19T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 37,
+      "team1Short": "PBKS",
+      "team2Short": "RCB",
+      "startTimeUtc": "2026-04-20T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 38,
+      "team1Short": "CSK",
+      "team2Short": "MI",
+      "startTimeUtc": "2026-04-20T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 39,
+      "team1Short": "GT",
+      "team2Short": "KKR",
+      "startTimeUtc": "2026-04-21T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 40,
+      "team1Short": "LSG",
+      "team2Short": "DC",
+      "startTimeUtc": "2026-04-22T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 41,
+      "team1Short": "SRH",
+      "team2Short": "MI",
+      "startTimeUtc": "2026-04-23T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 42,
+      "team1Short": "RCB",
+      "team2Short": "RR",
+      "startTimeUtc": "2026-04-24T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 43,
+      "team1Short": "CSK",
+      "team2Short": "SRH",
+      "startTimeUtc": "2026-04-25T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 44,
+      "team1Short": "PBKS",
+      "team2Short": "KKR",
+      "startTimeUtc": "2026-04-26T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 45,
+      "team1Short": "MI",
+      "team2Short": "LSG",
+      "startTimeUtc": "2026-04-27T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 46,
+      "team1Short": "DC",
+      "team2Short": "RCB",
+      "startTimeUtc": "2026-04-27T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 47,
+      "team1Short": "GT",
+      "team2Short": "RR",
+      "startTimeUtc": "2026-04-28T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 48,
+      "team1Short": "KKR",
+      "team2Short": "DC",
+      "startTimeUtc": "2026-04-29T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 49,
+      "team1Short": "CSK",
+      "team2Short": "PBKS",
+      "startTimeUtc": "2026-04-30T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 50,
+      "team1Short": "MI",
+      "team2Short": "RR",
+      "startTimeUtc": "2026-05-01T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 51,
+      "team1Short": "GT",
+      "team2Short": "SRH",
+      "startTimeUtc": "2026-05-02T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 52,
+      "team1Short": "RCB",
+      "team2Short": "CSK",
+      "startTimeUtc": "2026-05-03T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 53,
+      "team1Short": "KKR",
+      "team2Short": "RR",
+      "startTimeUtc": "2026-05-04T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 54,
+      "team1Short": "PBKS",
+      "team2Short": "LSG",
+      "startTimeUtc": "2026-05-04T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 55,
+      "team1Short": "DC",
+      "team2Short": "SRH",
+      "startTimeUtc": "2026-05-05T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 56,
+      "team1Short": "MI",
+      "team2Short": "GT",
+      "startTimeUtc": "2026-05-06T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 57,
+      "team1Short": "KKR",
+      "team2Short": "CSK",
+      "startTimeUtc": "2026-05-07T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 58,
+      "team1Short": "RCB",
+      "team2Short": "KKR",
+      "startTimeUtc": "2026-05-17T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 59,
+      "team1Short": "PBKS",
+      "team2Short": "RR",
+      "startTimeUtc": "2026-05-18T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 60,
+      "team1Short": "DC",
+      "team2Short": "GT",
+      "startTimeUtc": "2026-05-18T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 61,
+      "team1Short": "LSG",
+      "team2Short": "SRH",
+      "startTimeUtc": "2026-05-19T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 62,
+      "team1Short": "CSK",
+      "team2Short": "RR",
+      "startTimeUtc": "2026-05-20T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 63,
+      "team1Short": "MI",
+      "team2Short": "DC",
+      "startTimeUtc": "2026-05-21T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 64,
+      "team1Short": "LSG",
+      "team2Short": "GT",
+      "startTimeUtc": "2026-05-22T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 65,
+      "team1Short": "SRH",
+      "team2Short": "RCB",
+      "startTimeUtc": "2026-05-23T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 66,
+      "team1Short": "PBKS",
+      "team2Short": "DC",
+      "startTimeUtc": "2026-05-24T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 67,
+      "team1Short": "CSK",
+      "team2Short": "GT",
+      "startTimeUtc": "2026-05-25T10:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 68,
+      "team1Short": "SRH",
+      "team2Short": "KKR",
+      "startTimeUtc": "2026-05-25T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 69,
+      "team1Short": "MI",
+      "team2Short": "PBKS",
+      "startTimeUtc": "2026-05-26T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 70,
+      "team1Short": "LSG",
+      "team2Short": "RCB",
+      "startTimeUtc": "2026-05-27T14:00:00.000Z",
+      "stage": "league"
+    },
+    {
+      "matchNumber": 71,
+      "team1Short": "PBKS",
+      "team2Short": "RCB",
+      "startTimeUtc": "2026-05-29T14:00:00.000Z",
+      "stage": "qualifier_1"
+    },
+    {
+      "matchNumber": 72,
+      "team1Short": "MI",
+      "team2Short": "GT",
+      "startTimeUtc": "2026-05-30T14:00:00.000Z",
+      "stage": "eliminator"
+    },
+    {
+      "matchNumber": 73,
+      "team1Short": "MI",
+      "team2Short": "PBKS",
+      "startTimeUtc": "2026-06-01T14:00:00.000Z",
+      "stage": "qualifier_2"
+    },
+    {
+      "matchNumber": 74,
+      "team1Short": "RCB",
+      "team2Short": "PBKS",
+      "startTimeUtc": "2026-06-03T14:00:00.000Z",
+      "stage": "final"
+    }
+  ]
+}
