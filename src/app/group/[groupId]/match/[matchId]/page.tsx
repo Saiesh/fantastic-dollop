@@ -6,6 +6,7 @@ import { getOrCreatePalatUsage, palatStageForMatch } from "@/lib/palat";
 import { prisma } from "@/lib/prisma";
 import { GroupBets } from "@/components/match/group-bets";
 import { MatchLiveSection } from "@/components/match/match-live-section";
+import { MatchPageAutoRefresh } from "@/components/match/match-page-auto-refresh";
 import { MatchTrivia } from "@/components/match/match-trivia";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -75,6 +76,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
+      {/* Silently re-fetches server components while outcome is uncertain */}
+      <MatchPageAutoRefresh matchStatus={match.status} />
+
       {/* ------------------------------------------------------------------ */}
       {/* Match header card                                                   */}
       {/* ------------------------------------------------------------------ */}

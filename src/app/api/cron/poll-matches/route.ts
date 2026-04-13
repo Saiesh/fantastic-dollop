@@ -37,13 +37,11 @@ export async function GET(request: Request): Promise<NextResponse> {
         // Why: revalidate all group leaderboard pages so users see fresh standings
         // without waiting for the next full page build.
         if (standingsSummary.updated) {
-          const groups = await prisma.group.findMany({
-            where: { leagueId: activeLeague.id },
-            select: { id: true },
-          });
-          for (const g of groups) {
-            revalidatePath(`/group/${g.id}/leaderboard`);
-          }
+          // Revalidate leaderboard for every group in the league so the IPL
+          // team standings table shows the latest points/NRR immediately.
+          // Also bust the group dashboard which shows a mini-leaderboard.
+          revalidatePath(`/group/[groupId]/leaderboard`, "page");
+          revalidatePath(`/group/[groupId]`, "page");
         }
       }
     } catch {

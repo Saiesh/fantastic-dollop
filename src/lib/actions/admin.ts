@@ -455,6 +455,68 @@ async function assertAdmin(): Promise<{ error: string } | null> {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Manual cron trigger — sync match statuses and IPL standings on demand.
+// Useful during local development (Vercel crons don't run on localhost) and
+// as an emergency refresh button in production.
+// ---------------------------------------------------------------------------
+
+const TriggerSyncSchema = z.object({
+  leagueId: z.string().min(1),
+});
+
+export interface ManualSyncResult {
+  polled: number;
+  updated: number;
+  standingsUpdated: boolean;
+  error?: string;
+}
+
+export async function triggerManualSync(
+  input: unknown,
+): Promise<{ data?: ManualSyncResult; error?: string }> {
+  const auth = await assertAdmin();
+  if (auth) return auth;
+
+  const parsed = TriggerSyncSchema.safeParse(input);
+  if (!parsed.success) return { error: "Invalid input." };
+
+  const { leagueId } = parsed.data;
+
+  // Import here to avoid making heavy modules part of the default server-action
+  // bundle — they are only loaded when this action is actually invoked.
+  const { pollAndUpdateMatches } = await import("@/lib/match-poller");
+  const { updateStandingsFromCricinfo } = await import("@/lib/standings-scraper");
+
+  let polled = 0;
+  let updated = 0;
+  let standingsUpdated = false;
+
+  try {
+    const summary = await pollAndUpdateMatches();
+    polled = summary.polled;
+    updated = summary.updated;
+  } catch {
+    return { error: "Match poll failed." };
+  }
+
+  try {
+    const standings = await updateStandingsFromCricinfo(leagueId);
+    standingsUpdated = standings.updated;
+
+    if (standings.updated) {
+      revalidatePath(`/group/[groupId]/leaderboard`, "page");
+      revalidatePath(`/group/[groupId]`, "page");
+    }
+  } catch {
+    // Standings failure is non-fatal — match poll already succeeded.
+  }
+
+  revalidatePath(`/admin/league/${leagueId}`);
+
+  return { data: { polled, updated, standingsUpdated } };
+}
+
 function revalidateLeagueAdminPaths(leagueId: string): void {
   revalidatePath(`/admin/league/${leagueId}`);
   revalidatePath(`/admin/league/${leagueId}/players`);

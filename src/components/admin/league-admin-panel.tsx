@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { MatchList } from "@/components/admin/match-list";
 import { MatchActions } from "@/components/admin/match-actions";
+import { triggerManualSync } from "@/lib/actions/admin";
 import type { MatchStage, MatchStatus, MatchResult } from "@/generated/prisma";
 
 interface MatchTeam {
@@ -30,14 +31,33 @@ interface MatchData {
 }
 
 interface LeagueAdminPanelProps {
+  leagueId: string;
   leagueName: string;
   matches: MatchData[];
   className?: string;
 }
 
-export function LeagueAdminPanel({ leagueName, matches, className }: LeagueAdminPanelProps) {
+export function LeagueAdminPanel({ leagueId, leagueName, matches, className }: LeagueAdminPanelProps) {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "upcoming" | "live" | "completed">("all");
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function handleSync() {
+    setSyncStatus(null);
+    startTransition(async () => {
+      const res = await triggerManualSync({ leagueId });
+      if (res.error) {
+        setSyncStatus(`Error: ${res.error}`);
+      } else if (res.data) {
+        const { polled, updated, standingsUpdated } = res.data;
+        setSyncStatus(
+          `Done — ${polled} match${polled !== 1 ? "es" : ""} checked, ${updated} updated` +
+          (standingsUpdated ? ", standings refreshed" : ", standings unchanged"),
+        );
+      }
+    });
+  }
 
   const selectedMatch = matches.find((m) => m.id === selectedMatchId);
 
@@ -59,9 +79,34 @@ export function LeagueAdminPanel({ leagueName, matches, className }: LeagueAdmin
   return (
     <div className={cn("space-y-6", className)}>
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{leagueName}</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">League Administration</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{leagueName}</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">League Administration</p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={handleSync}
+            disabled={isPending}
+            className={cn(
+              "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+              isPending
+                ? "cursor-not-allowed border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-500"
+                : "border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-400 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-950/50",
+            )}
+          >
+            {isPending ? "Syncing…" : "↻ Sync matches & standings"}
+          </button>
+          {syncStatus ? (
+            <p className={cn(
+              "text-xs",
+              syncStatus.startsWith("Error") ? "text-red-500" : "text-green-600 dark:text-green-400",
+            )}>
+              {syncStatus}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {/* Stats Bar */}

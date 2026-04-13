@@ -21,22 +21,28 @@ export async function GET(
     return NextResponse.json({ error: "Match not found" }, { status: 404 });
   }
 
-  // Only poll Cricinfo for live or recently-started matches.
+  // Only fetch detailed commentary updates for actively live matches.
   // Upcoming (before start): no live data yet.
-  // Completed/abandoned: no need to poll.
+  // Completed/abandoned: no need to poll further.
   const isLiveOrRecent =
     match.status === "live_first_innings" ||
     match.status === "live_second_innings";
 
-  // We still try even for "upcoming" status in case Cricinfo has data
-  // (e.g. toss has happened but admin hasn't set status to live yet).
-  // The getLiveScore call is cheap (cached 20 s server-side).
-  //
-  // Why sequential: getLiveScore may populate Cricinfo match IDs when cricketdata
-  // supplies the score; getMatchUpdates needs those IDs — Promise.all raced them.
-  const liveScore = await getLiveScore(match.team1.shortName, match.team2.shortName);
+  // Why sequential: getLiveScore populates the espncricinfo cache keyed by
+  // series/match IDs; getMatchUpdates reuses that same cache entry — running
+  // them in parallel would race to populate the cache twice.
+  const liveScore = await getLiveScore(
+    match.espncricinfoUrl,
+    match.team1.shortName,
+    match.team2.shortName,
+  );
   const updates = isLiveOrRecent
-    ? await getMatchUpdates(match.team1.shortName, match.team2.shortName, 5)
+    ? await getMatchUpdates(
+        match.espncricinfoUrl,
+        match.team1.shortName,
+        match.team2.shortName,
+        5,
+      )
     : [];
 
   return NextResponse.json(
@@ -49,8 +55,10 @@ export async function GET(
     },
     {
       headers: {
-        // Allow the browser to cache for up to 20 s; align with server TTL.
-        "Cache-Control": "public, max-age=20, stale-while-revalidate=10",
+        // Allow the browser to cache for up to 60 s; aligns with the 2-minute
+        // server-side espncricinfo cache for a smooth stale-while-revalidate
+        // experience without hammering the consumer API.
+        "Cache-Control": "public, max-age=60, stale-while-revalidate=30",
       },
     },
   );

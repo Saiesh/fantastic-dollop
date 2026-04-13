@@ -34,6 +34,7 @@ export default async function LeagueAdminPage({ params }: PageProps) {
         </Link>
       </div>
       <LeagueAdminPanel
+        leagueId={leagueId}
         leagueName={`${league.name} ${league.seasonYear}`}
         matches={matches}
       />

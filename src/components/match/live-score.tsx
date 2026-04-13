@@ -58,7 +58,7 @@ interface LiveScoreProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const POLL_INTERVAL_MS = 30_000; // 30 seconds
+const POLL_INTERVAL_MS = 60_000; // 60 seconds — aligns with 2-min server cache
 
 /** True when the payload has anything useful to render (not only isLive). */
 function hasScoreContent(ls: LiveScorePayload): boolean {
@@ -306,7 +306,7 @@ export function LiveScore({
       ) : null}
 
       <p className="text-right text-xs text-muted-foreground">
-        Live data · refreshed every 30 s
+        Live data · refreshed every 60 s
       </p>
     </Card>
   );

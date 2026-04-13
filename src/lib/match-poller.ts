@@ -97,7 +97,7 @@ async function processMatch(match: PollableMatch): Promise<PollResultDetail> {
 
   if (scraped.data.matchPhase === "first_innings" && match.status === "upcoming") {
     await prisma.match.update({ where: { id: match.id }, data: { status: "live_first_innings" } });
-    revalidate(match.leagueId);
+    revalidate(match.leagueId, match.id);
     return makeDetail(match, "status_advanced", "live_first_innings", "Advanced to first innings.");
   }
 
@@ -110,14 +110,14 @@ async function processMatch(match: PollableMatch): Promise<PollResultDetail> {
         firstInningsCompleteTimeUtc: match.firstInningsCompleteTimeUtc ?? new Date(),
       },
     });
-    revalidate(match.leagueId);
+    revalidate(match.leagueId, match.id);
     return makeDetail(match, "status_advanced", "live_second_innings", "Advanced to second innings.");
   }
 
   if (scraped.data.matchPhase === "abandoned") {
     await prisma.match.update({ where: { id: match.id }, data: { status: "abandoned", result: "abandoned", winnerId: null } });
     await scoreMatch(match.id, "abandoned", null);
-    revalidate(match.leagueId);
+    revalidate(match.leagueId, match.id);
     return makeDetail(match, "abandoned", "abandoned", "Marked abandoned.");
   }
 
@@ -135,7 +135,7 @@ async function processMatch(match: PollableMatch): Promise<PollResultDetail> {
     },
   });
   await scoreMatch(match.id, resolved.result, resolved.winnerId);
-  revalidate(match.leagueId);
+  revalidate(match.leagueId, match.id);
   return makeDetail(match, nextStatus === "abandoned" ? "abandoned" : "completed", nextStatus, "Completed and scored.");
 }
 
@@ -167,9 +167,21 @@ function makeDetail(
   return { matchId: match.id, previousStatus: match.status, nextStatus, action, reason };
 }
 
-function revalidate(leagueId: string): void {
-  // Why: these pages depend on match status/result and should refresh after cron writes.
+function revalidate(leagueId: string, matchId: string): void {
+  // Admin pages — management views that show match status and scoring.
   revalidatePath(`/admin/league/${leagueId}`);
   revalidatePath(`/admin/league/${leagueId}/groups`);
   revalidatePath(`/admin/league/${leagueId}/players`);
+
+  // Why: revalidate the specific match page across all groups so that the
+  // match status badge, result banner, and live-section visibility update the
+  // instant the cron writes a new status or winner — without waiting for the
+  // client-side router.refresh() interval.
+  // Passing 'page' targets all dynamic [groupId] instances for this matchId.
+  revalidatePath(`/group/[groupId]/match/${matchId}`, "page");
+
+  // Why: the group dashboard card shows the Live badge and hero match status.
+  // Revalidating it here means users landing fresh see the updated state even
+  // if they don't have the dashboard open (no client-side refresh to rely on).
+  revalidatePath(`/group/[groupId]`, "page");
 }

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Countdown } from "@/components/ui/countdown";
 import { TeamBadge } from "@/components/ui/team-badge";
+import { LeaderboardLiveRefresh } from "@/components/leaderboard/leaderboard-live-refresh";
 import { cn, formatINR, formatMatchDate, formatMatchTime } from "@/lib/utils";
 import type { MatchStatus } from "@/generated/prisma";
 
@@ -35,8 +36,16 @@ export default async function GroupDashboard({ params }: GroupPageProps) {
   const restMatches = upcomingMatches.slice(1, 4);
   const top3 = leaderboardTop5.slice(0, 3);
 
+  // Auto-refresh the dashboard when any match is actively live so the Live
+  // badge and status card update without a manual reload.
+  const hasLiveMatch = upcomingMatches.some((m) => isLiveStatus(m.status));
+
   return (
     <div className="space-y-8">
+      {/* Re-fetches server components every 60 s while a match is live so the
+          Live badge, status, and leaderboard reflect cron-driven DB changes. */}
+      {hasLiveMatch ? <LeaderboardLiveRefresh intervalMs={60_000} className="sr-only" /> : null}
+
       <div>
         <p className="text-sm text-muted-foreground">
           Welcome back,{" "}
