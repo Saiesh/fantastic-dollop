@@ -1,6 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/get-session";
-import { getMatchById, isBettingOpen, isPalatWindowOpen } from "@/lib/matches";
+import {
+  getBetDeadline,
+  getMatchById,
+  isBettingOpen,
+  isPalatWindowOpen,
+} from "@/lib/matches";
 import { getGroupBetsForMatch, getUserBetForMatch } from "@/lib/bets";
 import { getOrCreatePalatUsage, palatStageForMatch } from "@/lib/palat";
 import { prisma } from "@/lib/prisma";
@@ -53,12 +58,16 @@ export default async function MatchDetailPage({ params }: PageProps) {
     ? new Date(match.firstInningsCompleteTimeUtc)
     : null;
 
-  const bettingOpen = isBettingOpen(startDate);
-  const palatOpen = isPalatWindowOpen(startDate, firstInnings);
-
-  const deadline = new Date(startDate.getTime() - 60 * 60 * 1000);
-  const deadlineIso = deadline.toISOString();
   const now = new Date();
+  const teamsCtx = {
+    team1Short: match.team1.shortName,
+    team2Short: match.team2.shortName,
+  };
+  const bettingOpen = isBettingOpen(startDate, now, teamsCtx);
+  const palatOpen = isPalatWindowOpen(startDate, firstInnings, now, teamsCtx);
+
+  const deadline = getBetDeadline(startDate, teamsCtx, now);
+  const deadlineIso = deadline.toISOString();
   const msUntilDeadline = deadline.getTime() - now.getTime();
   // Why: align visibility with the plan — picks hidden only while match is still upcoming and pre-deadline.
   const isBettingLocked = msUntilDeadline <= 0 || match.status !== "upcoming";

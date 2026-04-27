@@ -1,23 +1,19 @@
 import "server-only";
 
 // ---------------------------------------------------------------------------
-// Gemini API helper — "Some Trivia" section on match bet window.
+// Claude API helper — "Some Trivia" section on match bet window.
 //
-// Why: We call Gemini with Google Search grounding so it can pull live
-// web results (injuries, news, predictions) and distil them into 5-8 punchy
-// bullet points. Results are cached per match for 2 hours to avoid burning
-// API quota on every page load.
+// Why: We call Claude to distil IPL match context into 5-8 punchy bullet
+// points covering injuries, news, predictions, and head-to-head stats.
+// Results are cached per match for 2 hours to avoid burning API quota on
+// every page load.
 //
-// Required env var: GEMINI_API_KEY
+// Required env var: ANTHROPIC_API_KEY
 // ---------------------------------------------------------------------------
 
-// Why: gemini-2.0-flash is a non-thinking model — all output tokens go to
-// content, avoiding the reasoning-token overhead of 2.5-flash.
-const GEMINI_MODEL = "gemini-2.0-flash";
-const GEMINI_API_BASE =
-  "https://generativelanguage.googleapis.com/v1beta/models";
+const CLAUDE_MODEL = "claude-sonnet-4-20250514";
+const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 
-// In-process cache: matchId → { bullets, cachedAt }
 interface CachedTrivia {
   bullets: string[];
   cachedAt: number;
@@ -39,7 +35,7 @@ function buildPrompt(
 
 The upcoming IPL 2026 match is: **${team1Name} vs ${team2Name}** on ${matchDateIST}.
 
-Using current web search results, gather and summarise:
+Based on your knowledge, gather and summarise:
 1. Player injury or availability news for either squad
 2. Team management decisions (squad changes, captaincy, coaching news)
 3. Recent head-to-head record and current form of both teams
@@ -56,13 +52,11 @@ Return ONLY a valid JSON array of strings. Each string is one bullet point (1–
 // ---------------------------------------------------------------------------
 
 function extractJsonArray(text: string): string[] | null {
-  // Strip markdown fences if present
   const stripped = text
     .replace(/```json\s*/gi, "")
     .replace(/```\s*/g, "")
     .trim();
 
-  // Find the first '[' and last ']'
   const start = stripped.indexOf("[");
   const end = stripped.lastIndexOf("]");
   if (start === -1 || end === -1) return null;
@@ -86,7 +80,7 @@ function extractJsonArray(text: string): string[] | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch 5-8 trivia bullet points for a match from Gemini + Google Search.
+ * Fetch 5-8 trivia bullet points for a match from Claude.
  * Returns an empty array if the API key is missing or the call fails.
  * Results are memoised per matchId for 2 hours.
  */
@@ -96,19 +90,18 @@ export async function getMatchTrivia(
   team2Name: string,
   startTimeUtc: string,
 ): Promise<string[]> {
-  // Return cached bullets if still within TTL
+  // Why: return cached bullets if still within TTL to avoid redundant API calls.
   const cached = triviaCache.get(matchId);
   if (cached && Date.now() - cached.cachedAt < TRIVIA_TTL_MS) {
     return cached.bullets;
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    // Silently return empty so the UI section can be hidden gracefully.
+    // Why: silently return empty so the UI section can be hidden gracefully.
     return [];
   }
 
-  // Format the match date in IST for the prompt
   const matchDateIST = new Date(startTimeUtc).toLocaleDateString("en-IN", {
     timeZone: "Asia/Kolkata",
     weekday: "long",
@@ -119,28 +112,21 @@ export async function getMatchTrivia(
 
   const prompt = buildPrompt(team1Name, team2Name, matchDateIST);
 
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-
+  // Why: Claude uses header-based auth (x-api-key) instead of query-param keys.
   const body = {
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: prompt }],
-      },
-    ],
-    // Why: Google Search grounding lets Gemini retrieve current web results
-    // for injury news, predictions, and squad updates that post-date training.
-    tools: [{ googleSearch: {} }],
-    generationConfig: {
-      temperature: 0.4,
-      maxOutputTokens: 1024,
-    },
+    model: CLAUDE_MODEL,
+    max_tokens: 1024,
+    messages: [{ role: "user", content: prompt }],
   };
 
   try {
-    const res = await fetch(url, {
+    const res = await fetch(CLAUDE_API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
       body: JSON.stringify(body),
       // Why: trivia fetches are one-off per page load; no Next.js caching
       // since we manage our own TTL via triviaCache.
@@ -153,30 +139,20 @@ export async function getMatchTrivia(
 
     const data = (await res.json()) as Record<string, unknown>;
 
-    // Navigate the Gemini response: candidates[0].content.parts[0].text
-    const candidates = Array.isArray(data.candidates) ? data.candidates : [];
-    const firstCandidate =
-      candidates[0] !== null && typeof candidates[0] === "object"
-        ? (candidates[0] as Record<string, unknown>)
+    // Why: Claude response shape is { content: [{ type: "text", text: "..." }] }
+    const content = Array.isArray(data.content) ? data.content : [];
+    const firstBlock =
+      content[0] !== null && typeof content[0] === "object"
+        ? (content[0] as Record<string, unknown>)
         : {};
-    const content =
-      firstCandidate.content !== null &&
-      typeof firstCandidate.content === "object"
-        ? (firstCandidate.content as Record<string, unknown>)
-        : {};
-    const parts = Array.isArray(content.parts) ? content.parts : [];
-    const firstPart =
-      parts[0] !== null && typeof parts[0] === "object"
-        ? (parts[0] as Record<string, unknown>)
-        : {};
-    const text = typeof firstPart.text === "string" ? firstPart.text : "";
+    const text = typeof firstBlock.text === "string" ? firstBlock.text : "";
 
     const bullets = extractJsonArray(text) ?? [];
 
     triviaCache.set(matchId, { bullets, cachedAt: Date.now() });
     return bullets;
   } catch {
-    // Network/parse error — degrade gracefully
+    // Why: network/parse error — degrade gracefully so the UI still renders.
     return [];
   }
 }

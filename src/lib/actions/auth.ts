@@ -14,6 +14,7 @@ import {
   setSessionCookie,
 } from "@/lib/auth/session-cookie";
 import { signSessionToken, verifySessionToken } from "@/lib/auth/session-token";
+import { syncMatchDetailsOnLogin } from "@/lib/match-details-sync";
 import { checkInviteRateLimit } from "@/lib/rate-limit";
 
 const JoinSchema = z.object({
@@ -110,6 +111,7 @@ export async function login(input: unknown): Promise<LoginResult> {
   }
 
   await setSessionCookie(await signSessionToken(user.id));
+  scheduleLiveDataRefreshAfterAuth();
   return { ok: true, userId: user.id };
 }
 
@@ -149,6 +151,14 @@ async function getClientRateLimitKey(): Promise<string> {
 
 function normalizeDisplayName(raw: string): string {
   return raw.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Why: warms yesterday+today match details after auth without the full-season
+ * Gemini prompt; admin manual sync still runs the full `bustAndRefreshLiveData` path.
+ */
+function scheduleLiveDataRefreshAfterAuth(leagueId?: string): void {
+  void syncMatchDetailsOnLogin(leagueId).catch(() => {});
 }
 
 /**
@@ -312,6 +322,8 @@ export async function joinGroupWithInvite(
 
   await setSessionCookie(await signSessionToken(user.id));
 
+  scheduleLiveDataRefreshAfterAuth(group.leagueId);
+
   return {
     ok: true,
     groupId: group.id,
@@ -355,6 +367,7 @@ async function joinWithExistingSession(
 
   if (existingInGroup) {
     await setSessionCookie(await signSessionToken(userId));
+    scheduleLiveDataRefreshAfterAuth(leagueId);
     return {
       ok: true,
       groupId,
@@ -418,6 +431,8 @@ async function joinWithExistingSession(
   });
 
   await setSessionCookie(await signSessionToken(userId));
+
+  scheduleLiveDataRefreshAfterAuth(leagueId);
 
   return {
     ok: true,

@@ -36,6 +36,7 @@ export async function POST(
       leagueId: true,
       status: true,
       firstInningsCompleteTimeUtc: true,
+      startTimeUtc: true,
     },
   });
 
@@ -53,6 +54,12 @@ export async function POST(
   // we skip to avoid prematurely closing the Palat window.
   if (match.status !== "live_first_innings") {
     return NextResponse.json({ skipped: true, reason: "not in first innings" });
+  }
+
+  // Why: client can show innings_complete from cache while the fixture is still pre-start; never arm second innings before scheduled start.
+  const now = new Date();
+  if (now < match.startTimeUtc) {
+    return NextResponse.json({ skipped: true, reason: "before scheduled start" });
   }
 
   // Why: Setting firstInningsCompleteTimeUtc closes the Palat window across

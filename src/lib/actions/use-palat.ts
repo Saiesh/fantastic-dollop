@@ -58,6 +58,8 @@ async function executePalat(
       team2Id: true,
       firstInningsCompleteTimeUtc: true,
       result: true,
+      team1: { select: { shortName: true } },
+      team2: { select: { shortName: true } },
     },
   });
 
@@ -101,7 +103,18 @@ async function executePalat(
 
   // --- 5. Palat time-window check --------------------------------------------
   const now = new Date();
-  if (!isPalatWindowOpen(match.startTimeUtc, match.firstInningsCompleteTimeUtc, now)) {
+  const teamsCtx = {
+    team1Short: match.team1.shortName,
+    team2Short: match.team2.shortName,
+  };
+  if (
+    !isPalatWindowOpen(
+      match.startTimeUtc,
+      match.firstInningsCompleteTimeUtc,
+      now,
+      teamsCtx,
+    )
+  ) {
     return {
       error: {
         code: "PALAT_WINDOW_CLOSED",

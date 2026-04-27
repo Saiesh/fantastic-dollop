@@ -2,8 +2,8 @@
   "framework": "nextjs",
   "crons": [
     {
-      "path": "/api/cron/poll-matches",
-      "schedule": "0 3 * * *"
+      "path": "/api/cron/live-match-sync",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

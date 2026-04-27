@@ -9,6 +9,10 @@ import pg from "pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 // Why: import `password-hash` directly — `password.ts` uses `server-only`, which breaks `tsx prisma/seed.ts`.
 import { hashPassword } from "../src/lib/auth/password-hash";
+import {
+  buildIpl2026Fixtures,
+  fixtureToPrismaMatchData,
+} from "../src/lib/ipl-2026-schedule";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
@@ -43,8 +47,6 @@ const TEAM = {
   LSG: "seed_team_lsg",
 } as const;
 
-type TeamKey = keyof typeof TEAM;
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -52,172 +54,6 @@ type TeamKey = keyof typeof TEAM;
 /** Deterministic match ID from match number */
 function matchId(n: number): string {
   return `seed_match_${String(n).padStart(3, "0")}`;
-}
-
-/** Shorthand to build a UTC date for IPL 2026 (March–May window) */
-function matchDate(month: number, day: number, hourUtc: number): Date {
-  return new Date(Date.UTC(2026, month - 1, day, hourUtc, 0, 0));
-}
-
-// ---------------------------------------------------------------------------
-// IPL 2026 full league schedule (70 matches) — pairings, dates, and results
-// through match 17 as of 2026-04-11 (ESPN / official order).
-// ---------------------------------------------------------------------------
-
-type Outcome =
-  | "team1_win"
-  | "team2_win"
-  | "abandoned"
-  | "upcoming"
-  | "live_first_innings";
-
-interface FixtureDef {
-  matchNumber: number;
-  team1: TeamKey;
-  team2: TeamKey;
-  startTimeUtc: Date;
-  outcome: Outcome;
-}
-
-/**
- * Double-header first: ~3:30 PM IST ≈ 10:00 UTC.
- * Evening single-header / double-header second: 7:30 PM IST ≈ 14:00 UTC.
- * Why: keeps `startTimeUtc` aligned with real broadcast windows without inventing arbitrary values.
- */
-function buildIpl2026Fixtures(): FixtureDef[] {
-  const d = matchDate;
-  return [
-    { matchNumber: 1, team1: "RCB", team2: "SRH", startTimeUtc: d(3, 28, 14), outcome: "team1_win" },
-    { matchNumber: 2, team1: "KKR", team2: "MI", startTimeUtc: d(3, 29, 14), outcome: "team2_win" },
-    { matchNumber: 3, team1: "CSK", team2: "RR", startTimeUtc: d(3, 30, 14), outcome: "team2_win" },
-    { matchNumber: 4, team1: "GT", team2: "PBKS", startTimeUtc: d(3, 31, 14), outcome: "team2_win" },
-    { matchNumber: 5, team1: "DC", team2: "LSG", startTimeUtc: d(4, 1, 14), outcome: "team1_win" },
-    { matchNumber: 6, team1: "KKR", team2: "SRH", startTimeUtc: d(4, 2, 14), outcome: "team2_win" },
-    { matchNumber: 7, team1: "CSK", team2: "PBKS", startTimeUtc: d(4, 3, 14), outcome: "team2_win" },
-    { matchNumber: 8, team1: "DC", team2: "MI", startTimeUtc: d(4, 4, 10), outcome: "team1_win" },
-    { matchNumber: 9, team1: "GT", team2: "RR", startTimeUtc: d(4, 4, 14), outcome: "team2_win" },
-    { matchNumber: 10, team1: "LSG", team2: "SRH", startTimeUtc: d(4, 5, 10), outcome: "team1_win" },
-    { matchNumber: 11, team1: "CSK", team2: "RCB", startTimeUtc: d(4, 5, 14), outcome: "team2_win" },
-    // Apr 6: rain — no result (CREX / press reports: KKR vs PBKS abandoned)
-    { matchNumber: 12, team1: "KKR", team2: "PBKS", startTimeUtc: d(4, 6, 14), outcome: "abandoned" },
-    { matchNumber: 13, team1: "MI", team2: "RR", startTimeUtc: d(4, 7, 14), outcome: "team2_win" },
-    { matchNumber: 14, team1: "DC", team2: "GT", startTimeUtc: d(4, 8, 14), outcome: "team2_win" },
-    { matchNumber: 15, team1: "KKR", team2: "LSG", startTimeUtc: d(4, 9, 14), outcome: "team2_win" },
-    { matchNumber: 16, team1: "RCB", team2: "RR", startTimeUtc: d(4, 10, 14), outcome: "team2_win" },
-    // 2026-04-11: double-header — first fixture “live” for demo; second still upcoming
-    { matchNumber: 17, team1: "PBKS", team2: "SRH", startTimeUtc: d(4, 11, 10), outcome: "team1_win" },
-    { matchNumber: 18, team1: "CSK", team2: "DC", startTimeUtc: d(4, 11, 14), outcome: "upcoming" },
-    { matchNumber: 19, team1: "GT", team2: "LSG", startTimeUtc: d(4, 12, 10), outcome: "upcoming" },
-    { matchNumber: 20, team1: "MI", team2: "RCB", startTimeUtc: d(4, 12, 14), outcome: "upcoming" },
-    { matchNumber: 21, team1: "RR", team2: "SRH", startTimeUtc: d(4, 13, 14), outcome: "upcoming" },
-    { matchNumber: 22, team1: "CSK", team2: "KKR", startTimeUtc: d(4, 14, 14), outcome: "upcoming" },
-    { matchNumber: 23, team1: "LSG", team2: "RCB", startTimeUtc: d(4, 15, 14), outcome: "upcoming" },
-    { matchNumber: 24, team1: "MI", team2: "PBKS", startTimeUtc: d(4, 16, 14), outcome: "upcoming" },
-    { matchNumber: 25, team1: "GT", team2: "KKR", startTimeUtc: d(4, 17, 14), outcome: "upcoming" },
-    { matchNumber: 26, team1: "DC", team2: "RCB", startTimeUtc: d(4, 18, 10), outcome: "upcoming" },
-    { matchNumber: 27, team1: "CSK", team2: "SRH", startTimeUtc: d(4, 18, 14), outcome: "upcoming" },
-    { matchNumber: 28, team1: "KKR", team2: "RR", startTimeUtc: d(4, 19, 10), outcome: "upcoming" },
-    { matchNumber: 29, team1: "LSG", team2: "PBKS", startTimeUtc: d(4, 19, 14), outcome: "upcoming" },
-    { matchNumber: 30, team1: "GT", team2: "MI", startTimeUtc: d(4, 20, 14), outcome: "upcoming" },
-    { matchNumber: 31, team1: "DC", team2: "SRH", startTimeUtc: d(4, 21, 14), outcome: "upcoming" },
-    { matchNumber: 32, team1: "LSG", team2: "RR", startTimeUtc: d(4, 22, 14), outcome: "upcoming" },
-    { matchNumber: 33, team1: "CSK", team2: "MI", startTimeUtc: d(4, 23, 14), outcome: "upcoming" },
-    { matchNumber: 34, team1: "GT", team2: "RCB", startTimeUtc: d(4, 24, 14), outcome: "upcoming" },
-    { matchNumber: 35, team1: "DC", team2: "PBKS", startTimeUtc: d(4, 25, 10), outcome: "upcoming" },
-    { matchNumber: 36, team1: "RR", team2: "SRH", startTimeUtc: d(4, 25, 14), outcome: "upcoming" },
-    { matchNumber: 37, team1: "CSK", team2: "GT", startTimeUtc: d(4, 26, 10), outcome: "upcoming" },
-    { matchNumber: 38, team1: "KKR", team2: "LSG", startTimeUtc: d(4, 26, 14), outcome: "upcoming" },
-    { matchNumber: 39, team1: "DC", team2: "RCB", startTimeUtc: d(4, 27, 14), outcome: "upcoming" },
-    { matchNumber: 40, team1: "PBKS", team2: "RR", startTimeUtc: d(4, 28, 14), outcome: "upcoming" },
-    { matchNumber: 41, team1: "MI", team2: "SRH", startTimeUtc: d(4, 29, 14), outcome: "upcoming" },
-    { matchNumber: 42, team1: "GT", team2: "RCB", startTimeUtc: d(4, 30, 14), outcome: "upcoming" },
-    { matchNumber: 43, team1: "DC", team2: "RR", startTimeUtc: d(5, 1, 14), outcome: "upcoming" },
-    { matchNumber: 44, team1: "CSK", team2: "MI", startTimeUtc: d(5, 2, 14), outcome: "upcoming" },
-    { matchNumber: 45, team1: "KKR", team2: "SRH", startTimeUtc: d(5, 3, 10), outcome: "upcoming" },
-    { matchNumber: 46, team1: "GT", team2: "PBKS", startTimeUtc: d(5, 3, 14), outcome: "upcoming" },
-    { matchNumber: 47, team1: "LSG", team2: "MI", startTimeUtc: d(5, 4, 14), outcome: "upcoming" },
-    { matchNumber: 48, team1: "CSK", team2: "DC", startTimeUtc: d(5, 5, 14), outcome: "upcoming" },
-    { matchNumber: 49, team1: "PBKS", team2: "SRH", startTimeUtc: d(5, 6, 14), outcome: "upcoming" },
-    { matchNumber: 50, team1: "LSG", team2: "RCB", startTimeUtc: d(5, 7, 14), outcome: "upcoming" },
-    { matchNumber: 51, team1: "DC", team2: "KKR", startTimeUtc: d(5, 8, 14), outcome: "upcoming" },
-    { matchNumber: 52, team1: "GT", team2: "RR", startTimeUtc: d(5, 9, 14), outcome: "upcoming" },
-    { matchNumber: 53, team1: "CSK", team2: "LSG", startTimeUtc: d(5, 10, 10), outcome: "upcoming" },
-    { matchNumber: 54, team1: "MI", team2: "RCB", startTimeUtc: d(5, 10, 14), outcome: "upcoming" },
-    { matchNumber: 55, team1: "DC", team2: "PBKS", startTimeUtc: d(5, 11, 14), outcome: "upcoming" },
-    { matchNumber: 56, team1: "GT", team2: "SRH", startTimeUtc: d(5, 12, 14), outcome: "upcoming" },
-    { matchNumber: 57, team1: "KKR", team2: "RCB", startTimeUtc: d(5, 13, 14), outcome: "upcoming" },
-    { matchNumber: 58, team1: "MI", team2: "PBKS", startTimeUtc: d(5, 14, 14), outcome: "upcoming" },
-    { matchNumber: 59, team1: "CSK", team2: "LSG", startTimeUtc: d(5, 15, 14), outcome: "upcoming" },
-    { matchNumber: 60, team1: "GT", team2: "KKR", startTimeUtc: d(5, 16, 14), outcome: "upcoming" },
-    { matchNumber: 61, team1: "PBKS", team2: "RCB", startTimeUtc: d(5, 17, 10), outcome: "upcoming" },
-    { matchNumber: 62, team1: "DC", team2: "RR", startTimeUtc: d(5, 17, 14), outcome: "upcoming" },
-    { matchNumber: 63, team1: "CSK", team2: "SRH", startTimeUtc: d(5, 18, 14), outcome: "upcoming" },
-    { matchNumber: 64, team1: "LSG", team2: "RR", startTimeUtc: d(5, 19, 14), outcome: "upcoming" },
-    { matchNumber: 65, team1: "KKR", team2: "MI", startTimeUtc: d(5, 20, 14), outcome: "upcoming" },
-    { matchNumber: 66, team1: "CSK", team2: "GT", startTimeUtc: d(5, 21, 14), outcome: "upcoming" },
-    { matchNumber: 67, team1: "RCB", team2: "SRH", startTimeUtc: d(5, 22, 14), outcome: "upcoming" },
-    { matchNumber: 68, team1: "LSG", team2: "PBKS", startTimeUtc: d(5, 23, 14), outcome: "upcoming" },
-    { matchNumber: 69, team1: "MI", team2: "RR", startTimeUtc: d(5, 24, 10), outcome: "upcoming" },
-    { matchNumber: 70, team1: "DC", team2: "KKR", startTimeUtc: d(5, 24, 14), outcome: "upcoming" },
-  ];
-}
-
-function fixtureToMatchRow(f: FixtureDef): {
-  matchNumber: number;
-  team1Id: string;
-  team2Id: string;
-  date: Date;
-  result: "upcoming" | "team1_win" | "team2_win" | "draw" | "abandoned";
-  status: "upcoming" | "live_first_innings" | "live_second_innings" | "completed" | "abandoned";
-  winnerId?: string;
-} {
-  const team1Id = TEAM[f.team1];
-  const team2Id = TEAM[f.team2];
-
-  if (f.outcome === "abandoned") {
-    return {
-      matchNumber: f.matchNumber,
-      team1Id,
-      team2Id,
-      date: f.startTimeUtc,
-      result: "abandoned",
-      status: "abandoned",
-      winnerId: undefined,
-    };
-  }
-
-  if (f.outcome === "live_first_innings") {
-    return {
-      matchNumber: f.matchNumber,
-      team1Id,
-      team2Id,
-      date: f.startTimeUtc,
-      result: "upcoming",
-      status: "live_first_innings",
-    };
-  }
-
-  if (f.outcome === "upcoming") {
-    return {
-      matchNumber: f.matchNumber,
-      team1Id,
-      team2Id,
-      date: f.startTimeUtc,
-      result: "upcoming",
-      status: "upcoming",
-    };
-  }
-
-  const winnerId = f.outcome === "team1_win" ? team1Id : team2Id;
-  return {
-    matchNumber: f.matchNumber,
-    team1Id,
-    team2Id,
-    date: f.startTimeUtc,
-    result: f.outcome,
-    status: "completed",
-    winnerId,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +96,7 @@ async function main(): Promise<void> {
   const sharedPasswordHash = await hashPassword(SHARED_LOGIN_PASSWORD);
 
   const fixtureDefs = buildIpl2026Fixtures();
-  const matches = fixtureDefs.map(fixtureToMatchRow);
+  const matches = fixtureDefs.map((f) => fixtureToPrismaMatchData(f, TEAM));
 
   // Increased timeout because Supabase has network latency on each sequential query
   await prisma.$transaction(async (tx) => {
@@ -372,10 +208,11 @@ async function main(): Promise<void> {
         update: {
           team1Id: m.team1Id,
           team2Id: m.team2Id,
-          startTimeUtc: m.date,
+          startTimeUtc: m.startTimeUtc,
           result: m.result,
           status: m.status,
-          winnerId: m.winnerId ?? null,
+          winnerId: m.winnerId,
+          firstInningsCompleteTimeUtc: null,
         },
         create: {
           id: matchId(m.matchNumber),
@@ -383,11 +220,11 @@ async function main(): Promise<void> {
           matchNumber: m.matchNumber,
           team1Id: m.team1Id,
           team2Id: m.team2Id,
-          startTimeUtc: m.date,
+          startTimeUtc: m.startTimeUtc,
           stage: "league",
           result: m.result,
           status: m.status,
-          winnerId: m.winnerId ?? null,
+          winnerId: m.winnerId,
         },
       });
     }
@@ -426,7 +263,7 @@ async function main(): Promise<void> {
             matchId: matchId(m.matchNumber),
             selectedTeamId,
             betType: "standard",
-            lockedAt: m.date,
+            lockedAt: m.startTimeUtc,
           },
         });
         betCount++;
@@ -536,20 +373,19 @@ async function main(): Promise<void> {
     }
     console.log(`  ✔ ${playerIds.length} palat usage quotas`);
 
-    // ------ Team points table (standings after match 17, sourced from live ESPN API) ------
-    // Why: values from site.api.espn.com/apis/v2/sports/cricket/8048/standings?season=2026
-    // so the seed matches real-world IPL 2026 standings. The cron job keeps these current via standings-scraper.ts.
-    const standings: { teamId: string; mp: number; w: number; l: number; nr: number; nrr: number; pts: number; rank: number }[] = [
-      { teamId: TEAM.RR,   mp: 4, w: 4, l: 0, nr: 0, nrr:  2.055, pts: 8, rank: 1 },
-      { teamId: TEAM.PBKS, mp: 4, w: 3, l: 0, nr: 1, nrr:  0.720, pts: 7, rank: 2 },
-      { teamId: TEAM.RCB,  mp: 3, w: 2, l: 1, nr: 0, nrr:  1.231, pts: 4, rank: 3 },
-      { teamId: TEAM.DC,   mp: 3, w: 2, l: 1, nr: 0, nrr:  0.811, pts: 4, rank: 4 },
-      { teamId: TEAM.LSG,  mp: 3, w: 2, l: 1, nr: 0, nrr: -0.359, pts: 4, rank: 5 },
-      { teamId: TEAM.SRH,  mp: 4, w: 1, l: 3, nr: 0, nrr: -0.024, pts: 2, rank: 6 },
-      { teamId: TEAM.GT,   mp: 3, w: 1, l: 2, nr: 0, nrr: -0.270, pts: 2, rank: 7 },
-      { teamId: TEAM.MI,   mp: 3, w: 1, l: 2, nr: 0, nrr: -0.715, pts: 2, rank: 8 },
-      { teamId: TEAM.KKR,  mp: 4, w: 0, l: 3, nr: 1, nrr: -1.315, pts: 1, rank: 9 },
-      { teamId: TEAM.CSK,  mp: 3, w: 0, l: 3, nr: 0, nrr: -2.517, pts: 0, rank: 10 },
+    // ------ Team points table (standings after match 38, from ESPN `8048/standings?season=2026`) ------
+    // Why: keeps demo standings aligned with the official table; same source as the league sync script.
+    const standings: { teamId: string; mp: number; w: number; l: number; d: number; nr: number; nrr: number; pts: number; rank: number }[] = [
+      { teamId: TEAM.PBKS, mp: 7, w: 6, l: 0, d: 0, nr: 1, nrr: 1.333, pts: 13, rank: 1 },
+      { teamId: TEAM.RCB,  mp: 7, w: 5, l: 2, d: 0, nr: 0, nrr: 1.101, pts: 10, rank: 2 },
+      { teamId: TEAM.SRH,  mp: 8, w: 5, l: 3, d: 0, nr: 0, nrr: 0.815, pts: 10, rank: 3 },
+      { teamId: TEAM.RR,   mp: 8, w: 5, l: 3, d: 0, nr: 0, nrr: 0.602, pts: 10, rank: 4 },
+      { teamId: TEAM.GT,   mp: 8, w: 4, l: 4, d: 0, nr: 0, nrr: -0.475, pts: 8, rank: 5 },
+      { teamId: TEAM.CSK,  mp: 8, w: 3, l: 5, d: 0, nr: 0, nrr: -0.121, pts: 6, rank: 6 },
+      { teamId: TEAM.DC,   mp: 7, w: 3, l: 4, d: 0, nr: 0, nrr: -0.184, pts: 6, rank: 7 },
+      { teamId: TEAM.KKR,  mp: 8, w: 2, l: 5, d: 0, nr: 1, nrr: -0.751, pts: 5, rank: 8 },
+      { teamId: TEAM.MI,   mp: 7, w: 2, l: 5, d: 0, nr: 0, nrr: -0.736, pts: 4, rank: 9 },
+      { teamId: TEAM.LSG,  mp: 8, w: 2, l: 6, d: 0, nr: 0, nrr: -1.106, pts: 4, rank: 10 },
     ];
 
     for (const s of standings) {
@@ -559,6 +395,7 @@ async function main(): Promise<void> {
           matchesPlayed: s.mp,
           wins: s.w,
           losses: s.l,
+          draws: s.d,
           noResults: s.nr,
           netRunRate: s.nrr,
           points: s.pts,
@@ -570,6 +407,7 @@ async function main(): Promise<void> {
           matchesPlayed: s.mp,
           wins: s.w,
           losses: s.l,
+          draws: s.d,
           noResults: s.nr,
           netRunRate: s.nrr,
           points: s.pts,

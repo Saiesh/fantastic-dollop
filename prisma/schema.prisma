@@ -388,6 +388,20 @@ model TeamPointsTable {
   @@map("team_points_table")
 }
 
+/// Persists scoped Gemini match payloads (details vs live) so serverless invocations
+/// can share cache across users and crons; in-memory cache does not survive cold starts.
+model MatchSyncCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique @map("cache_key")
+  payload   Json
+  fetchedAt DateTime @map("fetched_at")
+  expiresAt DateTime @map("expires_at")
+
+  /// Why: speeds lookups for “fresh row for this key” (filter by key then expiry).
+  @@index([cacheKey, expiresAt])
+  @@map("match_sync_cache")
+}
+
 // ---------------------------------------------------------------------------
 // Note: LeaderboardView (PRD Section 5.2) is intentionally not a stored model.
 // It is computed from PointsLedger at query time:

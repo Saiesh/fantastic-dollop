@@ -1,0 +1,50 @@
+// ADDITIONS TO ADD TO schema.prisma (after the Match model, before the closing comment block)
+
+/// Stores live match news and updates from Gemini LLM
+/// Each news item represents a unique update about the match from various sources
+model MatchNews {
+  id        String   @id @default(cuid())
+  matchId   String   @map("match_id")
+  title     String
+  source    String   // e.g., "ESPNCricinfo", "Cricbuzz", "Sports Blog"
+  summary   String   @db.Text
+  keyPoints String[] @default([]) @map("key_points") // Array of bullet points
+  createdAt DateTime @default(now()) @map("created_at")
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  /// Prevents duplicate news items for the same match from the same source
+  @@unique([matchId, source, title])
+  @@index([matchId])
+  @@index([createdAt])
+  @@map("match_news")
+}
+
+/// Stores player statistics from Gemini match analysis
+/// Used to track top performers in each match
+model MatchPlayerStat {
+  id String @id @default(cuid())
+  matchId String @unique @map("match_id")
+
+  topBatterName String? @map("top_batter_name")
+  topBatterRuns Int? @map("top_batter_runs")
+  topBatterBalls Int? @map("top_batter_balls")
+  topBatterStrikeRate Float? @map("top_batter_strike_rate")
+
+  topBowlerName String? @map("top_bowler_name")
+  topBowlerWickets Int? @map("top_bowler_wickets")
+  topBowlerRuns Int? @map("top_bowler_runs")
+  topBowlerOvers String? @map("top_bowler_overs")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@map("match_player_stats")
+}
+
+// Also add these relations to the Match model:
+// matchNews MatchNews[]
+// playerStats MatchPlayerStat?

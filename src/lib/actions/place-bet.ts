@@ -55,6 +55,8 @@ export async function placeBet(
       team1Id: true,
       team2Id: true,
       result: true,
+      team1: { select: { shortName: true } },
+      team2: { select: { shortName: true } },
     },
   });
 
@@ -99,7 +101,11 @@ export async function placeBet(
 
   // --- 4. Deadline enforcement -----------------------------------------------
   const now = new Date();
-  if (!isBettingOpen(match.startTimeUtc, now)) {
+  const teamsCtx = {
+    team1Short: match.team1.shortName,
+    team2Short: match.team2.shortName,
+  };
+  if (!isBettingOpen(match.startTimeUtc, now, teamsCtx)) {
     return {
       error: {
         code: "DEADLINE_PASSED",
@@ -110,7 +116,7 @@ export async function placeBet(
 
   // --- 5. Upsert the bet (idempotent: create or update) ----------------------
   // lockedAt records when the bet deadline will close, useful for audit.
-  const deadline = getBetDeadline(match.startTimeUtc);
+  const deadline = getBetDeadline(match.startTimeUtc, teamsCtx, now);
 
   const bet = await prisma.bet.upsert({
     where: { userId_matchId_groupId: { userId, matchId, groupId } },

@@ -180,8 +180,8 @@ export async function setMatchCricinfoUrl(
   });
   if (!match) return { error: "Match not found." };
 
-  // Why: nullable persistence lets admins intentionally clear stale URLs so
-  // the poller can rediscover the current link via Gemini grounding.
+  // Why: nullable persistence lets admins clear a stale URL; live data no longer
+  // depends on this field (Gemini uses the league fixture list).
   await prisma.match.update({
     where: { id: matchId },
     data: { espncricinfoUrl: espncricinfoUrl ?? null },
@@ -483,33 +483,28 @@ export async function triggerManualSync(
 
   const { leagueId } = parsed.data;
 
-  // Import here to avoid making heavy modules part of the default server-action
-  // bundle — they are only loaded when this action is actually invoked.
-  const { pollAndUpdateMatches } = await import("@/lib/match-poller");
-  const { updateStandingsFromCricinfo } = await import("@/lib/standings-scraper");
+  // Why: import on demand so the default admin bundle stays lean.
+  const { bustAndRefreshLiveData } = await import("@/lib/gemini-live-data");
 
   let polled = 0;
   let updated = 0;
   let standingsUpdated = false;
 
   try {
-    const summary = await pollAndUpdateMatches();
-    polled = summary.polled;
-    updated = summary.updated;
-  } catch {
-    return { error: "Match poll failed." };
-  }
-
-  try {
-    const standings = await updateStandingsFromCricinfo(leagueId);
-    standingsUpdated = standings.updated;
-
-    if (standings.updated) {
+    const data = await bustAndRefreshLiveData(leagueId);
+    if (!data) {
+      return { error: "Live data sync failed (check GEMINI_API_KEY and league id)." };
+    }
+    standingsUpdated = data.standings.length > 0;
+    if (standingsUpdated) {
       revalidatePath(`/group/[groupId]/leaderboard`, "page");
       revalidatePath(`/group/[groupId]`, "page");
     }
+    // Why: surface row counts in the admin UI; one Gemini run updates both tables.
+    polled = data.matches.length;
+    updated = data.matches.length;
   } catch {
-    // Standings failure is non-fatal — match poll already succeeded.
+    return { error: "Live data sync failed." };
   }
 
   revalidatePath(`/admin/league/${leagueId}`);

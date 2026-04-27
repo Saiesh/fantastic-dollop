@@ -21,24 +21,24 @@ export async function GET(
     return NextResponse.json({ error: "Match not found" }, { status: 404 });
   }
 
-  // Only fetch detailed commentary updates for actively live matches.
-  // Upcoming (before start): no live data yet.
-  // Completed/abandoned: no need to poll further.
+  // Only fetch pseudo-updates for actively live matches.
   const isLiveOrRecent =
     match.status === "live_first_innings" ||
     match.status === "live_second_innings";
 
-  // Why sequential: getLiveScore populates the espncricinfo cache keyed by
-  // series/match IDs; getMatchUpdates reuses that same cache entry — running
-  // them in parallel would race to populate the cache twice.
+  // Why: both use `MatchSyncCache` (no extra Gemini on this route).
   const liveScore = await getLiveScore(
-    match.espncricinfoUrl,
+    match.leagueId,
+    matchId,
+    match.matchNumber,
     match.team1.shortName,
     match.team2.shortName,
   );
   const updates = isLiveOrRecent
     ? await getMatchUpdates(
-        match.espncricinfoUrl,
+        match.leagueId,
+        matchId,
+        match.matchNumber,
         match.team1.shortName,
         match.team2.shortName,
         5,
@@ -55,9 +55,7 @@ export async function GET(
     },
     {
       headers: {
-        // Allow the browser to cache for up to 60 s; aligns with the 2-minute
-        // server-side espncricinfo cache for a smooth stale-while-revalidate
-        // experience without hammering the consumer API.
+      // Why: short browser cache; server-side data comes from DB-backed match sync.
         "Cache-Control": "public, max-age=60, stale-while-revalidate=30",
       },
     },

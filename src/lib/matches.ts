@@ -30,9 +30,7 @@ const MATCH_SELECT = {
   team2Id: true,
   team1: { select: TEAM_BRIEF_SELECT },
   team2: { select: TEAM_BRIEF_SELECT },
-  // Why: the live-score route needs this URL to fall back to HTML scraping
-  // when cricketdata.org returns no data (plan: Replace ESPNCricinfo API with
-  // HTML Scraping, step 1).
+  // Why: optional admin override URL (legacy); live scores use gemini-live-data.
   espncricinfoUrl: true,
 } as const;
 
@@ -53,8 +51,6 @@ function toMatchDTO(row: MatchRow): MatchDTO {
     winnerId: row.winnerId,
     firstInningsCompleteTimeUtc:
       row.firstInningsCompleteTimeUtc?.toISOString() ?? null,
-    // Why: propagate the scraped URL so the live-score route can pass it to
-    // getLiveScore() / getMatchUpdates() without a second DB round-trip.
     espncricinfoUrl: row.espncricinfoUrl,
   };
 }
@@ -77,7 +73,6 @@ export async function getMatchesForLeague(leagueId: string) {
     select: {
       id: true,
       matchNumber: true,
-      // Why: admin needs to view/edit the source URL used by cron scraping.
       espncricinfoUrl: true,
       startTimeUtc: true,
       stage: true,
@@ -112,14 +107,76 @@ export async function getUpcomingMatches(
 
 const BET_DEADLINE_MS = 60 * 60 * 1000; // 1 hour before match start
 
-/** The UTC instant after which no new bets / edits are accepted. */
-export function getBetDeadline(matchStartUtc: Date): Date {
-  return new Date(matchStartUtc.getTime() - BET_DEADLINE_MS);
+/** Team short names for deadline overrides that depend on the fixture identity. */
+export interface MatchBettingTeams {
+  team1Short: string;
+  team2Short: string;
+}
+
+/**
+ * DC vs RCB on 27 Apr 2026 (IST): keep betting open until 8:00 PM IST instead of
+ * the usual 1 h before start — why: one-day ops override requested for that slate.
+ * Applies only when `now` is still that same IST calendar day so the rule expires automatically.
+ */
+const PROMO_DC_RCB_2026_04_27_EIGHT_PM_IST_MS = Date.UTC(2026, 3, 27, 14, 30, 0);
+
+function istCalendarDate(d: Date): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(d);
+  const n = (type: Intl.DateTimeFormatPart["type"]) =>
+    Number(parts.find((p) => p.type === type)?.value);
+  return { year: n("year"), month: n("month"), day: n("day") };
+}
+
+function extendedDcRcb27Apr2026Deadline(
+  matchStartUtc: Date,
+  teams: MatchBettingTeams | undefined,
+  now: Date,
+): Date | null {
+  if (!teams) return null;
+  const shorts = new Set([teams.team1Short, teams.team2Short]);
+  if (!shorts.has("DC") || !shorts.has("RCB")) return null;
+
+  const matchIst = istCalendarDate(matchStartUtc);
+  if (matchIst.year !== 2026 || matchIst.month !== 4 || matchIst.day !== 27) {
+    return null;
+  }
+
+  const nowIst = istCalendarDate(now);
+  if (nowIst.year !== 2026 || nowIst.month !== 4 || nowIst.day !== 27) {
+    return null;
+  }
+
+  return new Date(PROMO_DC_RCB_2026_04_27_EIGHT_PM_IST_MS);
+}
+
+/**
+ * The UTC instant after which no new bets / edits are accepted.
+ * When `teams`/`now` trigger a promo fixture, the deadline is the later of the
+ * standard (T−1h) time and the promo close — why: extended window without shifting Palat earlier.
+ */
+export function getBetDeadline(
+  matchStartUtc: Date,
+  teams?: MatchBettingTeams,
+  now: Date = new Date(),
+): Date {
+  const standard = new Date(matchStartUtc.getTime() - BET_DEADLINE_MS);
+  const extended = extendedDcRcb27Apr2026Deadline(matchStartUtc, teams, now);
+  if (!extended) return standard;
+  return new Date(Math.max(standard.getTime(), extended.getTime()));
 }
 
 /** True when `now` is still before the bet deadline for a match. */
-export function isBettingOpen(matchStartUtc: Date, now: Date = new Date()): boolean {
-  return now < getBetDeadline(matchStartUtc);
+export function isBettingOpen(
+  matchStartUtc: Date,
+  now: Date = new Date(),
+  teams?: MatchBettingTeams,
+): boolean {
+  return now < getBetDeadline(matchStartUtc, teams, now);
 }
 
 /**
@@ -131,8 +188,9 @@ export function isPalatWindowOpen(
   matchStartUtc: Date,
   firstInningsCompleteTimeUtc: Date | null,
   now: Date = new Date(),
+  teams?: MatchBettingTeams,
 ): boolean {
-  const deadlinePassed = now >= getBetDeadline(matchStartUtc);
+  const deadlinePassed = now >= getBetDeadline(matchStartUtc, teams, now);
   const firstInningsStillGoing =
     firstInningsCompleteTimeUtc === null || now < firstInningsCompleteTimeUtc;
   return deadlinePassed && firstInningsStillGoing;

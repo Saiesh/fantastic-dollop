@@ -6,10 +6,11 @@
     "dev": "next dev",
     "build": "prisma migrate deploy && next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint .",
     "test": "vitest run",
     "postinstall": "prisma generate",
-    "db:seed": "npx tsx prisma/seed.ts"
+    "db:seed": "npx tsx prisma/seed.ts",
+    "db:sync-ipl-2026": "npx tsx prisma/sync-ipl-2026-league.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
