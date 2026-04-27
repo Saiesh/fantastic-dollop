@@ -103,6 +103,19 @@ async function findRowFromMatchSyncCache(
 }
 
 /**
+ * Returns true when the live:<matchId> cache row is absent or expired.
+ * Why: lets the route schedule a background sync without importing live-match-sync
+ * into cricinfo, which would create a circular dependency.
+ */
+export async function isLiveCacheStale(matchId: string): Promise<boolean> {
+  const row = await prisma.matchSyncCache.findUnique({
+    where: { cacheKey: `live:${matchId}` },
+    select: { expiresAt: true },
+  });
+  return !row || row.expiresAt <= new Date();
+}
+
+/**
  * Return a live score snapshot for a match, backed by the league Gemini cache.
  * Why: `matchId` selects the per-fixture `live:` row; details cache is the fallback.
  */
@@ -130,11 +143,22 @@ export async function getLiveScore(
         (row.resultText && row.resultText.trim().length > 0),
     );
 
+  // Why: map Gemini's structured innings array to the UI's CricinfoInnings shape.
+  // Rows without innings (cached before this schema change) default to [] via Zod.
+  const innings: CricinfoInnings[] = (row.innings ?? []).map((inn) => ({
+    inningsNumber: inn.inningsNumber,
+    battingTeamShort: inn.battingTeamShort,
+    runs: inn.runs,
+    wickets: inn.wickets,
+    overs: inn.overs,
+    isComplete: inn.isComplete,
+  }));
+
   return {
     isLive: row.matchOngoing,
     statusText,
     toss: row.tossResult,
-    innings: [],
+    innings,
     isFirstInningsComplete: row.firstInningsComplete,
     matchEnded,
     cricinfoMatchId: null,

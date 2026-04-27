@@ -1,6 +1,8 @@
+import { after } from "next/server";
 import { NextResponse } from "next/server";
 import { getMatchById } from "@/lib/matches";
-import { getLiveScore, getMatchUpdates } from "@/lib/cricinfo";
+import { getLiveScore, getMatchUpdates, isLiveCacheStale } from "@/lib/cricinfo";
+import { syncLiveMatches } from "@/lib/live-match-sync";
 
 // Why: force-dynamic so Next.js never statically caches this route —
 // live score must always be a real-time fetch.
@@ -45,6 +47,13 @@ export async function GET(
       )
     : [];
 
+  // Why: user-activity-driven sync — when the live cache is stale and a user polls,
+  // schedule a background Gemini sync after the response is sent so the next poll
+  // (60s later) sees fresh data without blocking this request on a Gemini round-trip.
+  if (isLiveOrRecent && (await isLiveCacheStale(matchId))) {
+    after(() => syncLiveMatches(match.leagueId));
+  }
+
   return NextResponse.json(
     {
       matchId,
@@ -55,7 +64,7 @@ export async function GET(
     },
     {
       headers: {
-      // Why: short browser cache; server-side data comes from DB-backed match sync.
+        // Why: short browser cache; server-side data comes from DB-backed match sync.
         "Cache-Control": "public, max-age=60, stale-while-revalidate=30",
       },
     },

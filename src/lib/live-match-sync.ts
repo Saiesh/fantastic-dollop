@@ -48,12 +48,22 @@ Return **only** valid JSON (no markdown) for a single object with these exact fi
   "team2ShortName": "${team2Short}",
   "matchOngoing": <boolean>,
   "matchStarted": <boolean>,
-  "matchScore": "<one line or empty string>",
+  "matchScore": "<one line summary or empty string>",
   "isFirstInnings": <boolean>,
   "firstInningsComplete": <boolean>,
   "tossResult": <string or null>,
   "winningTeamShortName": <string or null>,
-  "resultText": <string or null>
+  "resultText": <string or null>,
+  "innings": [
+    {
+      "inningsNumber": <1 or 2>,
+      "battingTeamShort": "<e.g. MI>",
+      "runs": <number>,
+      "wickets": <number>,
+      "overs": "<e.g. 20.0>",
+      "isComplete": <boolean>
+    }
+  ]
 }`;
 }
 

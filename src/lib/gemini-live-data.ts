@@ -24,6 +24,15 @@ const LIVE_DATA_TTL_MS = 30 * 60 * 1_000; // 30 minutes
 // Public DTOs
 // ---------------------------------------------------------------------------
 
+export interface GeminiInningsData {
+  inningsNumber: number;
+  battingTeamShort: string;
+  runs: number;
+  wickets: number;
+  overs: string;
+  isComplete: boolean;
+}
+
 export interface GeminiMatchLiveData {
   matchNumber: number;
   team1ShortName: string;
@@ -36,6 +45,9 @@ export interface GeminiMatchLiveData {
   tossResult: string | null;
   winningTeamShortName: string | null;
   resultText: string | null;
+  // Why: structured innings breakdown so the UI can render score cards per innings
+  // rather than parsing the free-text matchScore string.
+  innings: GeminiInningsData[];
 }
 
 export interface GeminiStandingsRow {
@@ -56,6 +68,15 @@ export interface GeminiLiveDataResponse {
   fetchedAt: string;
 }
 
+const GeminiInningsDataSchema = z.object({
+  inningsNumber: z.number(),
+  battingTeamShort: z.string(),
+  runs: z.number(),
+  wickets: z.number(),
+  overs: z.string(),
+  isComplete: z.boolean(),
+});
+
 const GeminiMatchLiveDataSchema = z.object({
   matchNumber: z.number(),
   team1ShortName: z.string(),
@@ -68,6 +89,8 @@ const GeminiMatchLiveDataSchema = z.object({
   tossResult: z.string().nullable(),
   winningTeamShortName: z.string().nullable(),
   resultText: z.string().nullable(),
+  // Why: default to [] so existing cached rows without innings don't fail validation.
+  innings: z.array(GeminiInningsDataSchema).default([]),
 });
 
 const GeminiStandingsRowSchema = z.object({
@@ -178,12 +201,22 @@ Return **only** valid JSON (no markdown) in this exact shape:
       "team2ShortName": "<e.g. CSK>",
       "matchOngoing": <boolean>,
       "matchStarted": <boolean>,
-      "matchScore": "<one line or empty string>",
+      "matchScore": "<one line summary or empty string>",
       "isFirstInnings": <boolean>,
       "firstInningsComplete": <boolean>,
       "tossResult": <string or null>,
       "winningTeamShortName": <string or null>,
-      "resultText": <string or null>
+      "resultText": <string or null>,
+      "innings": [
+        {
+          "inningsNumber": <1 or 2>,
+          "battingTeamShort": "<e.g. MI>",
+          "runs": <number>,
+          "wickets": <number>,
+          "overs": "<e.g. 20.0>",
+          "isComplete": <boolean>
+        }
+      ]
     }
   ],
   "standings": [

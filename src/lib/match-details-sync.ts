@@ -74,12 +74,22 @@ Return **only** valid JSON (no markdown) in this exact shape:
       "team2ShortName": "<e.g. CSK>",
       "matchOngoing": <boolean>,
       "matchStarted": <boolean>,
-      "matchScore": "<one line or empty string>",
+      "matchScore": "<one line summary or empty string>",
       "isFirstInnings": <boolean>,
       "firstInningsComplete": <boolean>,
       "tossResult": <string or null>,
       "winningTeamShortName": <string or null>,
-      "resultText": <string or null>
+      "resultText": <string or null>,
+      "innings": [
+        {
+          "inningsNumber": <1 or 2>,
+          "battingTeamShort": "<e.g. MI>",
+          "runs": <number>,
+          "wickets": <number>,
+          "overs": "<e.g. 20.0>",
+          "isComplete": <boolean>
+        }
+      ]
     }
   ],
   "standings": [],
