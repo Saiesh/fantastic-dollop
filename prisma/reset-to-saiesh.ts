@@ -82,7 +82,7 @@ async function main(): Promise<void> {
         leagueId: league.id,
         name: GROUP_NAME,
         inviteCode,
-        buyInAmount: 500,
+        buyInAmount: 2000,
         currency: "INR",
         organiserId: saiesh.id,
         status: "pre_season",
